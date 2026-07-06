@@ -32,8 +32,13 @@ public class CertCheckService {
      * 检查证书并返回结构化信息。
      */
     public Map<String, Object> check(CertCheckRequest req) throws Exception {
-        byte[] der = DerInputUtil.toDer(req.getCertPem());
+        return check(DerInputUtil.toDer(req.getCertPem()));
+    }
 
+    /**
+     * 直接从 DER 字节解析证书。
+     */
+    public Map<String, Object> check(byte[] der) throws Exception {
         // 用标准 CertificateFactory(BC) 解析为 X509Certificate，便于取过期等信息
         CertificateFactory cf = CertificateFactory.getInstance("X.509", "BC");
         X509Certificate cert;

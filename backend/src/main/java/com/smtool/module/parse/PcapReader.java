@@ -72,11 +72,6 @@ public class PcapReader {
             pkt.setRaw(data);
             PacketParser.parse(pkt);
 
-            // pcap record 的 packet data 按 32 位对齐，跳过尾部填充字节
-            int pad = (4 - (inclLen % 4)) % 4;
-            if (pad > 0) {
-                in.skipNBytes(pad);
-            }
             return pkt;
         } catch (IOException e) {
             return null;

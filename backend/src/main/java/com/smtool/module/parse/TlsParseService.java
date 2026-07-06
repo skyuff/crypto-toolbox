@@ -223,7 +223,7 @@ public class TlsParseService {
     }
 
     /** 判断是否为国密 / TLCP 套件（0xe0xx 区间或已知 GM 套件编号） */
-    private boolean isGmSuite(int cs) {
+    public boolean isGmSuite(int cs) {
         if (cs < 0) {
             return false;
         }
@@ -242,10 +242,35 @@ public class TlsParseService {
     }
 
     /** 版本号描述：返回 "0x0303 (TLS 1.2)" */
-    private String describeVersion(int value) {
+    public String describeVersion(int value) {
         if (value < 0) {
             return null;
         }
         return String.format("0x%04x", value) + " (" + VERSIONS.getOrDefault(value, "未知版本") + ")";
+    }
+
+    /**
+     * 构建密码套件描述对象。
+     */
+    public Map<String, Object> buildCipherSuite(int cs) {
+        Map<String, Object> s = new LinkedHashMap<>();
+        s.put("value", String.format("0x%04x", cs));
+        s.put("name", CIPHER_SUITES.getOrDefault(cs, "未知套件"));
+        s.put("gm", isGmSuite(cs));
+        return s;
+    }
+
+    /**
+     * 解析 ClientHello（不含 record 头，含 handshake 头）。
+     */
+    public Map<String, Object> parseClientHello(ByteReader r) {
+        return parseHandshake(r, new LinkedHashMap<>());
+    }
+
+    /**
+     * 解析 ServerHello（不含 record 头，含 handshake 头）。
+     */
+    public Map<String, Object> parseServerHello(ByteReader r) {
+        return parseHandshake(r, new LinkedHashMap<>());
     }
 }

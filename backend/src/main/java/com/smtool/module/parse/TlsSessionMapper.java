@@ -1,10 +1,10 @@
 package com.smtool.module.parse;
 
 import com.smtool.module.cert.CertCheckService;
-import com.smtool.util.CodecUtil;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -15,11 +15,9 @@ import java.util.Map;
 public class TlsSessionMapper {
 
     private final CertCheckService certCheckService;
-    private final TlsParseService tlsParseService;
 
-    public TlsSessionMapper(CertCheckService certCheckService, TlsParseService tlsParseService) {
+    public TlsSessionMapper(CertCheckService certCheckService) {
         this.certCheckService = certCheckService;
-        this.tlsParseService = tlsParseService;
     }
 
     public TlsSessionDto toDto(TlsSession session) {
@@ -32,12 +30,12 @@ public class TlsSessionMapper {
 
         int version = session.getServerHelloVersion() != null ? session.getServerHelloVersion()
                 : (session.getClientHelloVersion() != null ? session.getClientHelloVersion() : 0);
-        dto.setProtocolVersion(tlsParseService.describeVersion(version));
+        dto.setProtocolVersion(describeVersion(version));
 
         boolean gm = false;
         if (session.getServerCipherSuite() != null) {
-            gm = tlsParseService.isGmSuite(session.getServerCipherSuite());
-            dto.setServerSelectedCipherSuite(tlsParseService.buildCipherSuite(session.getServerCipherSuite()));
+            gm = isGmSuite(session.getServerCipherSuite());
+            dto.setServerSelectedCipherSuite(buildCipherSuite(session.getServerCipherSuite()));
         }
         if (gm || (version == 0x0101)) {
             dto.setLabel("TLCP");
@@ -78,9 +76,67 @@ public class TlsSessionMapper {
             return list;
         }
         for (int cs : cipherSuites) {
-            list.add(tlsParseService.buildCipherSuite(cs));
+            list.add(buildCipherSuite(cs));
         }
         return list;
+    }
+
+    private String describeVersion(int value) {
+        if (value < 0) {
+            return null;
+        }
+        Map<Integer, String> versions = new LinkedHashMap<>();
+        versions.put(0x0300, "SSL 3.0");
+        versions.put(0x0301, "TLS 1.0");
+        versions.put(0x0302, "TLS 1.1");
+        versions.put(0x0303, "TLS 1.2");
+        versions.put(0x0304, "TLS 1.3");
+        versions.put(0x0101, "GM/T TLCP 1.1（国密）");
+        return String.format("0x%04x", value) + " (" + versions.getOrDefault(value, "未知版本") + ")";
+    }
+
+    private boolean isGmSuite(int cs) {
+        if (cs < 0) {
+            return false;
+        }
+        if ((cs & 0xff00) == 0xe000) {
+            return true;
+        }
+        return cs == 0x00c6 || cs == 0x00c7;
+    }
+
+    private Map<String, Object> buildCipherSuite(int cs) {
+        Map<Integer, String> cipherSuites = new LinkedHashMap<>();
+        cipherSuites.put(0xe011, "ECC_SM4_SM3（国密）");
+        cipherSuites.put(0xe013, "ECDHE_SM4_SM3（国密）");
+        cipherSuites.put(0xe015, "ECC_SM4_GCM_SM3（国密）");
+        cipherSuites.put(0xe019, "IBSDH_SM4_SM3（国密）");
+        cipherSuites.put(0xe01c, "RSA_SM4_SM3（国密）");
+        cipherSuites.put(0x00c6, "TLS_SM4_GCM_SM3（国密, TLS1.3）");
+        cipherSuites.put(0x00c7, "TLS_SM4_CCM_SM3（国密, TLS1.3）");
+        cipherSuites.put(0x0000, "TLS_NULL_WITH_NULL_NULL");
+        cipherSuites.put(0x002f, "TLS_RSA_WITH_AES_128_CBC_SHA");
+        cipherSuites.put(0x0035, "TLS_RSA_WITH_AES_256_CBC_SHA");
+        cipherSuites.put(0x009c, "TLS_RSA_WITH_AES_128_GCM_SHA256");
+        cipherSuites.put(0x009d, "TLS_RSA_WITH_AES_256_GCM_SHA384");
+        cipherSuites.put(0xc013, "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA");
+        cipherSuites.put(0xc014, "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA");
+        cipherSuites.put(0xc02b, "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256");
+        cipherSuites.put(0xc02c, "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384");
+        cipherSuites.put(0xc02f, "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256");
+        cipherSuites.put(0xc030, "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384");
+        cipherSuites.put(0xcca8, "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256");
+        cipherSuites.put(0xcca9, "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256");
+        cipherSuites.put(0x1301, "TLS_AES_128_GCM_SHA256（TLS1.3）");
+        cipherSuites.put(0x1302, "TLS_AES_256_GCM_SHA384（TLS1.3）");
+        cipherSuites.put(0x1303, "TLS_CHACHA20_POLY1305_SHA256（TLS1.3）");
+        cipherSuites.put(0x00ff, "TLS_EMPTY_RENEGOTIATION_INFO_SCSV");
+
+        Map<String, Object> s = new LinkedHashMap<>();
+        s.put("value", String.format("0x%04x", cs));
+        s.put("name", cipherSuites.getOrDefault(cs, "未知套件"));
+        s.put("gm", isGmSuite(cs));
+        return s;
     }
 
     private List<TlsCertificateDto> mapCerts(List<byte[]> certDers) {
