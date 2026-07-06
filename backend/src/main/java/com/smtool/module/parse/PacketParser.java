@@ -57,7 +57,7 @@ public class PacketParser {
         if (protocol == 6) {
             parseTcp(packet, raw, offset + headerLen);
         } else if (protocol == 17) {
-            packet.setProtocol("udp");
+            parseUdp(packet, raw, offset + headerLen);
         }
     }
 
@@ -83,7 +83,7 @@ public class PacketParser {
         if (nextHeader == 6) {
             parseTcp(packet, raw, payloadOffset);
         } else if (nextHeader == 17) {
-            packet.setProtocol("udp");
+            parseUdp(packet, raw, payloadOffset);
         }
     }
 
@@ -104,6 +104,26 @@ public class PacketParser {
         if (raw.length > offset + dataOffset) {
             byte[] payload = new byte[raw.length - offset - dataOffset];
             System.arraycopy(raw, offset + dataOffset, payload, 0, payload.length);
+            packet.setPayload(payload);
+        } else {
+            packet.setPayload(new byte[0]);
+        }
+    }
+
+    private static void parseUdp(PcapPacket packet, byte[] raw, int offset) {
+        if (raw.length < offset + 8) {
+            return;
+        }
+        int srcPort = ((raw[offset] & 0xff) << 8) | (raw[offset + 1] & 0xff);
+        int dstPort = ((raw[offset + 2] & 0xff) << 8) | (raw[offset + 3] & 0xff);
+        int len = ((raw[offset + 4] & 0xff) << 8) | (raw[offset + 5] & 0xff);
+        int dataLen = len - 8;
+        packet.setSrcPort(srcPort);
+        packet.setDstPort(dstPort);
+        packet.setProtocol("udp");
+        if (dataLen > 0 && raw.length >= offset + 8 + dataLen) {
+            byte[] payload = new byte[dataLen];
+            System.arraycopy(raw, offset + 8, payload, 0, dataLen);
             packet.setPayload(payload);
         } else {
             packet.setPayload(new byte[0]);

@@ -75,14 +75,20 @@ public class IpsecParseService {
         PAYLOAD_TYPES_V1.put(13, "VID (Vendor ID)");
     }
 
-    /** 解析入口 */
+    /** 解析入口（单条报文） */
     public Map<String, Object> parse(IpsecParseRequest req) {
         byte[] data = CodecUtil.decode(req.getInput(), req.getFormat() == null ? "hex" : req.getFormat());
+        Map<String, Object> result = parseMessage(data);
+        result.put("srcIp", req.getSrcIp());
+        result.put("dstIp", req.getDstIp());
+        return result;
+    }
+
+    /** 直接解析 ISAKMP 消息（byte[] 入参），供流量解析复用 */
+    public Map<String, Object> parseMessage(byte[] data) {
         ByteReader r = new ByteReader(data);
 
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("srcIp", req.getSrcIp());
-        result.put("dstIp", req.getDstIp());
         result.put("totalBytes", data.length);
 
         // ===== ISAKMP 头部 =====
@@ -127,6 +133,7 @@ public class IpsecParseService {
         while (curType > 0 && r.has(4) && guard++ < 64) {
             Map<String, Object> p = new LinkedHashMap<>();
             p.put("payloadType", curType + " (" + plTable.getOrDefault(curType, "未知") + ")");
+            p.put("payloadTypeCode", curType);
             int next = r.u8();
             int critReserved = r.u8();
             p.put("critical", critReserved < 0 ? null : ((critReserved & 0x80) != 0));
