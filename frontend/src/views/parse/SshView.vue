@@ -20,39 +20,56 @@
           </el-form-item>
         </el-col>
         <el-col :span="12">
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="目标端口">
-                <el-input v-model.number="form.dstPort" placeholder="22" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="源 IP">
-                <el-input v-model="form.srcIp" placeholder="0.0.0.0" />
-              </el-form-item>
-            </el-col>
-          </el-row>
+          <el-form-item label="SSH 报文">
+            <el-input
+              v-model="form.input"
+              type="textarea"
+              :rows="6"
+              placeholder="可输入 SSH banner 文本（如 SSH-2.0-OpenSSH_8.9p1）或十六进制/UTF8 报文"
+            />
+          </el-form-item>
+        </el-col>
+      </el-row>
+
+      <el-row :gutter="20">
+        <el-col :span="8">
+          <el-form-item label="源 IP">
+            <el-input v-model="form.srcIp" placeholder="0.0.0.0" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
           <el-form-item label="目标 IP">
             <el-input v-model="form.dstIp" placeholder="0.0.0.0" />
+          </el-form-item>
+        </el-col>
+        <el-col :span="8">
+          <el-form-item label="目标端口">
+            <el-input v-model.number="form.dstPort" placeholder="22" />
           </el-form-item>
         </el-col>
       </el-row>
 
       <el-form-item>
         <div class="btn-row">
-          <el-button type="primary" :loading="loading" @click="run">解析</el-button>
+          <el-button type="primary" :loading="loadingTraffic" @click="runTraffic">解析流量包</el-button>
+          <el-button type="primary" :loading="loadingMessage" @click="runMessage">解析 SSH 报文</el-button>
           <el-button @click="clear">清空</el-button>
         </div>
       </el-form-item>
     </el-form>
 
-    <div v-if="result" class="result-section">
+    <div v-if="messageResult" class="result-section">
+      <div class="section-title">SSH 报文解析结果</div>
+      <JsonView :data="cnMessageResult" />
+    </div>
+
+    <div v-if="trafficResult" class="result-section">
       <div class="summary">
-        共解析出 {{ result.sessionCount }} 组会话数据，解析时间：{{ formatTime(parseTimeDate) }}
+        共解析出 {{ trafficResult.sessionCount }} 组会话数据，解析时间：{{ formatTime(parseTimeDate) }}
       </div>
 
       <el-table
-        :data="result.sessions"
+        :data="trafficResult.sessions"
         border
         style="width: 100%"
         row-key="id"
@@ -168,54 +185,125 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { Upload } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import api from '../../api'
+import JsonView from '../../components/JsonView.vue'
+
+const CN_MAP = {
+  srcIp: '源 IP',
+  dstIp: '目标 IP',
+  dstPort: '目标端口',
+  totalBytes: '总字节数',
+  kind: '报文类型',
+  identificationString: '版本标识串',
+  protoVersion: '协议版本',
+  softwareVersion: '软件版本',
+  comments: '注释',
+  packetLength: '数据包长度',
+  paddingLength: '填充长度',
+  payloadLength: 'Payload 长度',
+  messageCode: '消息码',
+  kexInit: '密钥交换初始化',
+  cookie: 'Cookie',
+  firstKexPacketFollows: '后续首个 KEX 包',
+  reserved: '保留字段',
+  truncated: '数据截断',
+  note: '备注',
+  kex_algorithms: 'KEX 算法',
+  server_host_key_algorithms: '主机密钥算法',
+  encryption_algorithms_client_to_server: '加密算法（C→S）',
+  encryption_algorithms_server_to_client: '加密算法（S→C）',
+  mac_algorithms_client_to_server: 'MAC 算法（C→S）',
+  mac_algorithms_server_to_client: 'MAC 算法（S→C）',
+  compression_algorithms_client_to_server: '压缩算法（C→S）',
+  compression_algorithms_server_to_client: '压缩算法（S→C）',
+  languages_client_to_server: '语言（C→S）',
+  languages_server_to_client: '语言（S→C）'
+}
 
 const form = reactive({
   file: null,
   fileName: '',
+  input: '',
+  format: 'hex',
   srcIp: '',
   dstIp: '',
   dstPort: 22
 })
 
-const result = ref(null)
-const loading = ref(false)
+const trafficResult = ref(null)
+const messageResult = ref(null)
+const loadingTraffic = ref(false)
+const loadingMessage = ref(false)
 const parseTimeDate = ref(null)
+
+const cnMessageResult = computed(() => messageResult.value ? toChinese(messageResult.value) : null)
+
+function toChinese(data) {
+  if (Array.isArray(data)) return data.map(toChinese)
+  if (data && typeof data === 'object') {
+    const out = {}
+    for (const [k, v] of Object.entries(data)) {
+      out[CN_MAP[k] || k] = toChinese(v)
+    }
+    return out
+  }
+  return data
+}
 
 function handleFileChange(file) {
   form.file = file.raw
   form.fileName = file.name
 }
 
-async function run() {
+async function runTraffic() {
   if (!form.file) {
     ElMessage.warning('请先上传流量包文件')
     return
   }
-  loading.value = true
+  loadingTraffic.value = true
   try {
     const fd = new FormData()
     fd.append('file', form.file)
     const res = await api.post('/ssh/traffic/parse', fd)
-    result.value = res
+    trafficResult.value = res
     parseTimeDate.value = new Date()
+    messageResult.value = null
   } catch (e) {
     ElMessage.error('解析失败：' + (e.response?.data?.message || e.message))
   } finally {
-    loading.value = false
+    loadingTraffic.value = false
+  }
+}
+
+async function runMessage() {
+  if (!form.input.trim()) {
+    ElMessage.warning('请先输入 SSH 报文')
+    return
+  }
+  loadingMessage.value = true
+  try {
+    const res = await api.post('/ssh/parse', { ...form })
+    messageResult.value = res
+  } catch (e) {
+    ElMessage.error('解析失败：' + (e.response?.data?.message || e.message))
+  } finally {
+    loadingMessage.value = false
   }
 }
 
 function clear() {
   form.file = null
   form.fileName = ''
+  form.input = ''
+  form.format = 'hex'
   form.srcIp = ''
   form.dstIp = ''
   form.dstPort = 22
-  result.value = null
+  trafficResult.value = null
+  messageResult.value = null
   parseTimeDate.value = null
 }
 
@@ -271,6 +359,11 @@ function isSelected(row, key, alg, side) {
 }
 .result-section {
   margin-top: 20px;
+}
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 12px;
 }
 .summary {
   margin-bottom: 16px;
