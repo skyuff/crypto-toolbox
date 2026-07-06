@@ -44,6 +44,8 @@ public class TlsSessionMapper {
         } else {
             dto.setLabel("TLS");
         }
+        dto.setGm(gm || version == 0x0101);
+        dto.setResult(dto.getLabel());
 
         dto.setHandshakeCompleted(session.isSawServerHello()
                 && (session.isSawServerFinished() || session.isSawClientFinished()));
@@ -64,6 +66,7 @@ public class TlsSessionMapper {
         dto.setServerCompressionMethod(session.getServerCompressionMethod());
         dto.setClientExtensions(session.getClientExtensions());
         dto.setServerExtensions(session.getServerExtensions());
+        dto.setServerKeyExchange(session.getServerKeyExchange());
         dto.setServerCertificateChain(mapCerts(session.getServerCertChainDer()));
         dto.setClientCertificateChain(mapCerts(session.getClientCertChainDer()));
         dto.setNotes(session.getNotes());
@@ -91,8 +94,8 @@ public class TlsSessionMapper {
         versions.put(0x0302, "TLS 1.1");
         versions.put(0x0303, "TLS 1.2");
         versions.put(0x0304, "TLS 1.3");
-        versions.put(0x0101, "GM/T TLCP 1.1（国密）");
-        return String.format("0x%04x", value) + " (" + versions.getOrDefault(value, "未知版本") + ")";
+        versions.put(0x0101, "GMT TLCP 1.1");
+        return String.format("0x%04x", value) + " [" + versions.getOrDefault(value, "未知版本") + "]";
     }
 
     private boolean isGmSuite(int cs) {
@@ -152,8 +155,11 @@ public class TlsSessionMapper {
                 dto.setSerialNumber((String) info.get("serialNumber"));
                 dto.setSubject((String) info.get("subject"));
                 dto.setIssuer((String) info.get("issuer"));
-                dto.setNotBefore((String) info.get("notBefore"));
-                dto.setNotAfter((String) info.get("notAfter"));
+                String notBefore = (String) info.get("notBefore");
+                String notAfter = (String) info.get("notAfter");
+                dto.setNotBefore(notBefore);
+                dto.setNotAfter(notAfter);
+                dto.setValidityPeriod(formatValidity(notBefore, notAfter));
                 dto.setExpired(Boolean.TRUE.equals(info.get("expired")));
                 dto.setSignatureAlgorithm((Map<String, Object>) info.get("signatureAlgorithm"));
                 dto.setPublicKeyAlgorithm((String) info.get("publicKeyAlgorithm"));
@@ -178,9 +184,20 @@ public class TlsSessionMapper {
         }
         for (Map<String, Object> ext : exts) {
             if ("2.5.29.15".equals(ext.get("oid"))) {
-                return (String) ext.get("description");
+                String desc = (String) ext.get("description");
+                if (desc != null && desc.startsWith("密钥用法: ")) {
+                    return desc.substring("密钥用法: ".length());
+                }
+                return desc;
             }
         }
         return null;
+    }
+
+    private String formatValidity(String notBefore, String notAfter) {
+        if (notBefore == null && notAfter == null) {
+            return null;
+        }
+        return (notBefore == null ? "-" : notBefore) + " ~ " + (notAfter == null ? "-" : notAfter);
     }
 }

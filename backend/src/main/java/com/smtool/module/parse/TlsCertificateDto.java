@@ -14,6 +14,7 @@ public class TlsCertificateDto {
     private String issuer;
     private String notBefore;
     private String notAfter;
+    private String validityPeriod;
     private boolean expired;
     private Map<String, Object> signatureAlgorithm;
     private String publicKeyAlgorithm;
@@ -70,6 +71,14 @@ public class TlsCertificateDto {
 
     public void setNotAfter(String notAfter) {
         this.notAfter = notAfter;
+    }
+
+    public String getValidityPeriod() {
+        return validityPeriod;
+    }
+
+    public void setValidityPeriod(String validityPeriod) {
+        this.validityPeriod = validityPeriod;
     }
 
     public boolean isExpired() {

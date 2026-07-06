@@ -28,6 +28,7 @@ public class TlsSession {
     private String serverSessionId;
     private List<Map<String, Object>> clientExtensions = new ArrayList<>();
     private List<Map<String, Object>> serverExtensions = new ArrayList<>();
+    private Map<String, Object> serverKeyExchange;
 
     private List<byte[]> serverCertChainDer = new ArrayList<>();
     private List<byte[]> clientCertChainDer = new ArrayList<>();
@@ -183,6 +184,14 @@ public class TlsSession {
 
     public void setServerExtensions(List<Map<String, Object>> serverExtensions) {
         this.serverExtensions = serverExtensions;
+    }
+
+    public Map<String, Object> getServerKeyExchange() {
+        return serverKeyExchange;
+    }
+
+    public void setServerKeyExchange(Map<String, Object> serverKeyExchange) {
+        this.serverKeyExchange = serverKeyExchange;
     }
 
     public List<byte[]> getServerCertChainDer() {

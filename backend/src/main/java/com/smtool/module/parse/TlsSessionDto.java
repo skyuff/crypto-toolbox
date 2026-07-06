@@ -15,6 +15,8 @@ public class TlsSessionDto {
     private String dstIp;
     private int dstPort;
     private String label;
+    private String result;
+    private boolean gm;
     private boolean handshakeCompleted;
     private String authMode;
     private Map<String, Object> serverSelectedCipherSuite;
@@ -28,6 +30,7 @@ public class TlsSessionDto {
     private String serverSessionId;
     private List<Map<String, Object>> clientExtensions;
     private List<Map<String, Object>> serverExtensions;
+    private Map<String, Object> serverKeyExchange;
     private List<TlsCertificateDto> serverCertificateChain;
     private List<TlsCertificateDto> clientCertificateChain;
     private List<String> notes;
@@ -86,6 +89,22 @@ public class TlsSessionDto {
 
     public void setLabel(String label) {
         this.label = label;
+    }
+
+    public String getResult() {
+        return result;
+    }
+
+    public void setResult(String result) {
+        this.result = result;
+    }
+
+    public boolean isGm() {
+        return gm;
+    }
+
+    public void setGm(boolean gm) {
+        this.gm = gm;
     }
 
     public boolean isHandshakeCompleted() {
@@ -190,6 +209,14 @@ public class TlsSessionDto {
 
     public void setServerExtensions(List<Map<String, Object>> serverExtensions) {
         this.serverExtensions = serverExtensions;
+    }
+
+    public Map<String, Object> getServerKeyExchange() {
+        return serverKeyExchange;
+    }
+
+    public void setServerKeyExchange(Map<String, Object> serverKeyExchange) {
+        this.serverKeyExchange = serverKeyExchange;
     }
 
     public List<TlsCertificateDto> getServerCertificateChain() {

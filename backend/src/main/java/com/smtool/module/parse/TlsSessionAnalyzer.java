@@ -4,6 +4,7 @@ import com.smtool.util.CodecUtil;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -160,6 +161,7 @@ public class TlsSessionAnalyzer {
                 List<byte[]> certs = certExtractor.extractCertificates(msg.getPayload());
                 session.getServerCertChainDer().addAll(certs);
             }
+            case 12 -> session.setServerKeyExchange(parseServerKeyExchange(msg.getPayload(), session.getServerCipherSuite()));
             case 13 -> session.setSawCertificateRequest(true);
             case 20 -> session.setSawServerFinished(true);
         }
@@ -229,5 +231,108 @@ public class TlsSessionAnalyzer {
             }
         }
         return null;
+    }
+
+    private Map<String, Object> parseServerKeyExchange(byte[] payload, Integer serverCipherSuite) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("rawHex", CodecUtil.toHex(payload));
+        if (payload == null || payload.length == 0) {
+            return result;
+        }
+        String algo = inferKeyExchangeAlgorithm(serverCipherSuite);
+        result.put("algorithm", algo);
+        try {
+            if ("ECDHE".equals(algo) || "SM2".equals(algo) || "ECDH".equals(algo)) {
+                parseEcdheServerKeyExchange(payload, result);
+            } else if ("DHE".equals(algo) || "DH".equals(algo)) {
+                parseDhServerKeyExchange(payload, result);
+            } else if ("RSA".equals(algo)) {
+                parseRsaServerKeyExchange(payload, result);
+            }
+        } catch (Exception e) {
+            result.put("parseNote", "ServerKeyExchange 解析失败: " + e.getMessage());
+        }
+        return result;
+    }
+
+    private String inferKeyExchangeAlgorithm(Integer cipherSuite) {
+        if (cipherSuite == null) {
+            return "未知";
+        }
+        int cs = cipherSuite;
+        if ((cs & 0xff00) == 0xe000 || cs == 0x00c6 || cs == 0x00c7) {
+            return "SM2";
+        }
+        String name = resolveCipherSuiteName(cs).toLowerCase();
+        if (name.contains("ecdhe")) return "ECDHE";
+        if (name.contains("ecdh")) return "ECDH";
+        if (name.contains("dhe") || name.contains("dh")) return "DHE";
+        if (name.contains("rsa")) return "RSA";
+        return "未知";
+    }
+
+    private String resolveCipherSuiteName(int cs) {
+        switch (cs) {
+            case 0x0000: return "TLS_NULL_WITH_NULL_NULL";
+            case 0x002f: return "TLS_RSA_WITH_AES_128_CBC_SHA";
+            case 0x0035: return "TLS_RSA_WITH_AES_256_CBC_SHA";
+            case 0x009c: return "TLS_RSA_WITH_AES_128_GCM_SHA256";
+            case 0x009d: return "TLS_RSA_WITH_AES_256_GCM_SHA384";
+            case 0xc013: return "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA";
+            case 0xc014: return "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA";
+            case 0xc02b: return "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256";
+            case 0xc02c: return "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384";
+            case 0xc02f: return "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256";
+            case 0xc030: return "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384";
+            case 0xcca8: return "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256";
+            case 0xcca9: return "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256";
+            case 0x1301: return "TLS_AES_128_GCM_SHA256";
+            case 0x1302: return "TLS_AES_256_GCM_SHA384";
+            case 0x1303: return "TLS_CHACHA20_POLY1305_SHA256";
+            case 0x00ff: return "TLS_EMPTY_RENEGOTIATION_INFO_SCSV";
+            default: return "未知套件";
+        }
+    }
+
+    private void parseEcdheServerKeyExchange(byte[] payload, Map<String, Object> result) {
+        if (payload.length < 4) return;
+        int curveType = payload[0] & 0xff;
+        result.put("curveType", curveType == 1 ? "named_curve" : "unknown(" + curveType + ")");
+        if (payload.length >= 3) {
+            int namedCurve = ((payload[1] & 0xff) << 8) | (payload[2] & 0xff);
+            result.put("namedCurve", "0x" + String.format("%04x", namedCurve));
+        }
+        if (payload.length >= 4) {
+            int pubLen = payload[3] & 0xff;
+            if (4 + pubLen <= payload.length) {
+                byte[] pub = new byte[pubLen];
+                System.arraycopy(payload, 4, pub, 0, pubLen);
+                result.put("publicKeyHex", CodecUtil.toHex(pub));
+            }
+        }
+    }
+
+    private void parseDhServerKeyExchange(byte[] payload, Map<String, Object> result) {
+        int pos = 0;
+        pos = readMpint(payload, pos, result, "p");
+        pos = readMpint(payload, pos, result, "g");
+        readMpint(payload, pos, result, "Ys");
+    }
+
+    private void parseRsaServerKeyExchange(byte[] payload, Map<String, Object> result) {
+        int pos = 0;
+        pos = readMpint(payload, pos, result, "modulus");
+        readMpint(payload, pos, result, "exponent");
+    }
+
+    private int readMpint(byte[] payload, int pos, Map<String, Object> result, String key) {
+        if (pos + 2 > payload.length) return pos;
+        int len = ((payload[pos] & 0xff) << 8) | (payload[pos + 1] & 0xff);
+        pos += 2;
+        if (len < 0 || pos + len > payload.length) return pos;
+        byte[] value = new byte[len];
+        System.arraycopy(payload, pos, value, 0, len);
+        result.put(key + "Hex", CodecUtil.toHex(value));
+        return pos + len;
     }
 }
