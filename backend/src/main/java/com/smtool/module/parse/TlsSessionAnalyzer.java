@@ -100,7 +100,7 @@ public class TlsSessionAnalyzer {
                     ByteReader r = new ByteReader(toHandshakeBytes(msg));
                     Map<String, Object> hs = tlsParseService.parseClientHello(r);
                     session.setSawClientHello(true);
-                    Object ver = hs.get("version");
+                    Object ver = hs.get("client_version_value");
                     if (ver instanceof Integer) {
                         session.setClientHelloVersion((Integer) ver);
                     }
@@ -134,7 +134,7 @@ public class TlsSessionAnalyzer {
                     ByteReader r = new ByteReader(toHandshakeBytes(msg));
                     Map<String, Object> hs = tlsParseService.parseServerHello(r);
                     session.setSawServerHello(true);
-                    Object ver = hs.get("version");
+                    Object ver = hs.get("server_version_value");
                     if (ver instanceof Integer) {
                         session.setServerHelloVersion((Integer) ver);
                     }

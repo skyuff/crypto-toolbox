@@ -16,6 +16,7 @@
               <el-icon class="el-icon--upload"><Upload /></el-icon>
               <div class="el-upload__text">点击或拖拽文件到此区域上传</div>
             </el-upload>
+            <div v-if="form.fileName" class="file-name">{{ form.fileName }}</div>
           </el-form-item>
         </el-col>
         <el-col :span="12">
@@ -45,15 +46,132 @@
 
       <el-form-item>
         <div class="btn-row">
-          <el-button type="primary" :loading="loading" @click="run">解析</el-button>
+          <el-button type="primary" :loading="loadingTraffic" @click="runTraffic">解析流量包</el-button>
+          <el-button type="primary" :loading="loadingMessage" @click="runMessage">解析 TLS 报文</el-button>
           <el-button @click="clear">清空</el-button>
         </div>
       </el-form-item>
     </el-form>
 
-    <div v-if="cnResult" class="result-section">
-      <div class="section-title">解析结果</div>
-      <JsonView :data="cnResult" />
+    <div v-if="messageResult" class="result-section">
+      <div class="section-title">TLS 报文解析结果</div>
+      <JsonView :data="cnMessageResult" />
+    </div>
+
+    <div v-if="trafficResult" class="result-section">
+      <div class="section-title">流量包解析结果</div>
+      <div class="summary">
+        共解析出 {{ trafficResult.sessionCount }} 组会话数据，解析时间：{{ formatTime(parseTimeDate) }}
+      </div>
+
+      <el-table
+        :data="trafficResult.sessions"
+        border
+        style="width: 100%"
+        row-key="id"
+      >
+        <el-table-column type="expand" width="40">
+          <template #default="{ row }">
+            <div class="detail-panel">
+              <el-descriptions :column="2" border>
+                <el-descriptions-item label="协议版本" :span="2">
+                  <div class="version-line">
+                    <span>{{ row.protocolVersion || '-' }}</span>
+                    <el-tag v-if="row.label" size="small" type="info">{{ row.label }}</el-tag>
+                    <el-tag v-if="row.gm" size="small" type="danger">国密</el-tag>
+                  </div>
+                </el-descriptions-item>
+                <el-descriptions-item label="握手完成">
+                  {{ row.handshakeCompleted ? '是' : '否' }}
+                </el-descriptions-item>
+                <el-descriptions-item label="认证模式">
+                  {{ row.authMode || '-' }}
+                </el-descriptions-item>
+                <el-descriptions-item label="服务端选中密码套件" :span="2">
+                  {{ cipherSuiteText(row.serverSelectedCipherSuite) }}
+                </el-descriptions-item>
+                <el-descriptions-item label="Client Random" :span="2">
+                  {{ row.clientRandom || '-' }}
+                </el-descriptions-item>
+                <el-descriptions-item label="Server Random" :span="2">
+                  {{ row.serverRandom || '-' }}
+                </el-descriptions-item>
+                <el-descriptions-item label="Server Name" :span="2">
+                  {{ row.serverName || '-' }}
+                </el-descriptions-item>
+                <el-descriptions-item label="客户端会话 ID" :span="2">
+                  {{ row.clientSessionId || '-' }}
+                </el-descriptions-item>
+                <el-descriptions-item label="服务端会话 ID" :span="2">
+                  {{ row.serverSessionId || '-' }}
+                </el-descriptions-item>
+                <el-descriptions-item label="客户端压缩方法" :span="1">
+                  {{ row.clientCompressionMethods || '-' }}
+                </el-descriptions-item>
+                <el-descriptions-item label="服务端压缩方法" :span="1">
+                  {{ row.serverCompressionMethod || '-' }}
+                </el-descriptions-item>
+                <el-descriptions-item v-if="row.notes && row.notes.length" label="解析备注" :span="2">
+                  <div v-for="(note, idx) in row.notes" :key="'note-' + idx" class="note-item">{{ note }}</div>
+                </el-descriptions-item>
+              </el-descriptions>
+
+              <div class="detail-block">
+                <div class="block-title">客户端密码套件</div>
+                <div class="algo-list">
+                  <el-tag
+                    v-for="(cs, idx) in row.clientCipherSuites"
+                    :key="'cs-' + idx"
+                    size="small"
+                    class="algo-tag"
+                    :type="isSelectedCipherSuite(row, cs) ? 'success' : ''"
+                  >
+                    {{ cs.name || cs.value || cs }}
+                  </el-tag>
+                  <span v-if="!row.clientCipherSuites || row.clientCipherSuites.length === 0">-</span>
+                </div>
+              </div>
+
+              <el-collapse class="param-collapse">
+                <el-collapse-item v-if="row.clientExtensions && row.clientExtensions.length" title="客户端扩展列表">
+                  <div v-for="(ext, idx) in row.clientExtensions" :key="'ce-' + idx" class="ext-block">
+                    <div class="ext-title">{{ ext.type || ext['类型'] || '扩展 ' + idx }}</div>
+                    <JsonView :data="toChinese(ext)" />
+                  </div>
+                </el-collapse-item>
+                <el-collapse-item v-if="row.serverExtensions && row.serverExtensions.length" title="服务端扩展列表">
+                  <div v-for="(ext, idx) in row.serverExtensions" :key="'se-' + idx" class="ext-block">
+                    <div class="ext-title">{{ ext.type || ext['类型'] || '扩展 ' + idx }}</div>
+                    <JsonView :data="toChinese(ext)" />
+                  </div>
+                </el-collapse-item>
+                <el-collapse-item v-if="row.serverCertificateChain && row.serverCertificateChain.length" title="服务端证书链">
+                  <div v-for="(cert, idx) in row.serverCertificateChain" :key="'scert-' + idx" class="cert-block">
+                    <div class="cert-title">证书 {{ idx + 1 }}</div>
+                    <JsonView :data="toChinese(cert)" />
+                  </div>
+                </el-collapse-item>
+                <el-collapse-item v-if="row.clientCertificateChain && row.clientCertificateChain.length" title="客户端证书链">
+                  <div v-for="(cert, idx) in row.clientCertificateChain" :key="'ccert-' + idx" class="cert-block">
+                    <div class="cert-title">证书 {{ idx + 1 }}</div>
+                    <JsonView :data="toChinese(cert)" />
+                  </div>
+                </el-collapse-item>
+              </el-collapse>
+            </div>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="协议版本" prop="protocolVersion" min-width="260" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ row.protocolVersion || '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="发起方 IP" prop="srcIp" min-width="140" />
+        <el-table-column label="发起方端口" prop="srcPort" width="110" />
+        <el-table-column label="接收端 IP" prop="dstIp" min-width="140" />
+        <el-table-column label="接收端端口" prop="dstPort" width="110" />
+      </el-table>
     </div>
   </el-card>
 </template>
@@ -95,19 +213,65 @@ const CN_MAP = {
   name: '名称',
   gm: '国密',
   type: '类型',
-  data: '数据'
+  data: '数据',
+  sessionCount: '会话数',
+  parseTimeMs: '解析耗时(ms)',
+  sessions: '会话列表',
+  protocolVersion: '协议版本',
+  label: '标签',
+  handshakeCompleted: '握手完成',
+  authMode: '认证模式',
+  serverSelectedCipherSuite: '服务端选中密码套件',
+  clientRandom: '客户端随机数',
+  serverRandom: '服务端随机数',
+  serverName: '服务端名称',
+  clientCipherSuites: '客户端密码套件',
+  clientCompressionMethods: '客户端压缩方法',
+  serverCompressionMethod: '服务端压缩方法',
+  clientSessionId: '客户端会话 ID',
+  serverSessionId: '服务端会话 ID',
+  clientExtensions: '客户端扩展',
+  serverExtensions: '服务端扩展',
+  serverCertificateChain: '服务端证书链',
+  clientCertificateChain: '客户端证书链',
+  notes: '解析备注',
+  version: '版本',
+  serialNumber: '序列号',
+  subject: '主题',
+  issuer: '签发者',
+  notBefore: '生效时间',
+  notAfter: '失效时间',
+  expired: '已过期',
+  signatureAlgorithm: '签名算法',
+  publicKeyAlgorithm: '公钥算法',
+  publicKeyHex: '公钥(hex)',
+  keyUsage: '密钥用途',
+  isSm2: 'SM2',
+  sm2: 'SM2',
+  derBase64: 'DER(Base64)',
+  extensions: '扩展',
+  checks: '校验结果',
+  description: '描述',
+  oid: 'OID',
+  critical: '关键',
+  value: '值'
 }
 
 const form = reactive({
+  file: null,
+  fileName: '',
   input: '',
   format: 'hex',
   srcIp: '',
   dstIp: ''
 })
-const rawResult = ref(null)
-const loading = ref(false)
+const trafficResult = ref(null)
+const messageResult = ref(null)
+const loadingTraffic = ref(false)
+const loadingMessage = ref(false)
+const parseTimeDate = ref(null)
 
-const cnResult = computed(() => rawResult.value ? toChinese(rawResult.value) : null)
+const cnMessageResult = computed(() => messageResult.value ? toChinese(messageResult.value) : null)
 
 function toChinese(data) {
   if (Array.isArray(data)) return data.map(toChinese)
@@ -121,40 +285,78 @@ function toChinese(data) {
   return data
 }
 
-function arrayBufferToHex(buffer) {
-  const bytes = new Uint8Array(buffer)
-  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')
-}
-
 function handleFileChange(file) {
-  const reader = new FileReader()
-  reader.onload = (e) => {
-    form.input = arrayBufferToHex(e.target.result)
-    form.format = 'hex'
-    ElMessage.success('流量包文件上传成功')
-  }
-  reader.readAsArrayBuffer(file.raw)
+  form.file = file.raw
+  form.fileName = file.name
 }
 
-async function run() {
-  if (!form.input.trim()) {
-    ElMessage.warning('请先上传文件或输入 TLS 报文')
+async function runTraffic() {
+  if (!form.file) {
+    ElMessage.warning('请先上传流量包文件')
     return
   }
-  loading.value = true
+  loadingTraffic.value = true
   try {
-    rawResult.value = await api.post('/tls/parse', { ...form })
+    const fd = new FormData()
+    fd.append('file', form.file)
+    const res = await api.post('/tls/traffic/parse', fd)
+    trafficResult.value = res
+    parseTimeDate.value = new Date()
+    messageResult.value = null
+  } catch (e) {
+    ElMessage.error('解析失败：' + (e.response?.data?.message || e.message))
   } finally {
-    loading.value = false
+    loadingTraffic.value = false
+  }
+}
+
+async function runMessage() {
+  if (!form.input.trim()) {
+    ElMessage.warning('请先输入 TLS 报文')
+    return
+  }
+  loadingMessage.value = true
+  try {
+    const res = await api.post('/tls/parse', { ...form })
+    messageResult.value = res
+  } catch (e) {
+    ElMessage.error('解析失败：' + (e.response?.data?.message || e.message))
+  } finally {
+    loadingMessage.value = false
   }
 }
 
 function clear() {
+  form.file = null
+  form.fileName = ''
   form.input = ''
   form.format = 'hex'
   form.srcIp = ''
   form.dstIp = ''
-  rawResult.value = null
+  trafficResult.value = null
+  messageResult.value = null
+  parseTimeDate.value = null
+}
+
+function formatTime(date) {
+  if (!date) return '-'
+  const pad = n => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+}
+
+function cipherSuiteText(cs) {
+  if (!cs) return '-'
+  if (typeof cs === 'string') return cs
+  return cs.name || cs.value || JSON.stringify(cs)
+}
+
+function isSelectedCipherSuite(row, cs) {
+  if (!cs || !row || !row.serverSelectedCipherSuite) return false
+  const selected = row.serverSelectedCipherSuite
+  if (typeof cs === 'object' && typeof selected === 'object') {
+    return cs.value === selected.value
+  }
+  return cs === selected
 }
 </script>
 
@@ -177,5 +379,68 @@ function clear() {
   font-size: 16px;
   font-weight: 600;
   margin-bottom: 12px;
+}
+.summary {
+  margin-bottom: 16px;
+  font-size: 15px;
+  font-weight: 500;
+  color: #303133;
+}
+.file-name {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #606266;
+  word-break: break-all;
+}
+.detail-panel {
+  padding: 16px;
+  background: #fafafa;
+  border-radius: 4px;
+}
+.detail-block {
+  margin-top: 16px;
+}
+.block-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 8px;
+}
+.algo-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.algo-tag {
+  margin: 0;
+}
+.param-collapse {
+  margin-top: 16px;
+}
+.ext-block,
+.cert-block {
+  margin-bottom: 12px;
+}
+.ext-block:last-child,
+.cert-block:last-child {
+  margin-bottom: 0;
+}
+.ext-title,
+.cert-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 6px;
+}
+.note-item {
+  font-size: 13px;
+  color: #f56c6c;
+  margin-bottom: 4px;
+}
+.version-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 </style>

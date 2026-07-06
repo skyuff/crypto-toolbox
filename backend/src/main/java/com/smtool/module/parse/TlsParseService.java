@@ -143,6 +143,7 @@ public class TlsParseService {
         // client_version / server_version（ClientHello、ServerHello 均以 2 字节版本开头）
         int hsVersion = r.u16();
         hs.put(hsType == 2 ? "server_version" : "client_version", describeVersion(hsVersion));
+        hs.put(hsType == 2 ? "server_version_value" : "client_version_value", hsVersion);
 
         // random(32B)
         byte[] random = r.bytes(32);
