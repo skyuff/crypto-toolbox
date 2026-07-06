@@ -23,3 +23,24 @@ release/
 # Env
 .env
 .env.local
+
+# Debug / temp
+*.pcap
+*.pcapng
+parse_result.json
+backend/tmp_pcapng/
+backend/cp.txt
+*.b64
+*.hex
+debug_*.py
+test_*.py
+randomness_demo_test.py
+*_demo_*.txt
+
+# IDE / editor
+.trae/
+.vscode/
+.claude/
+
+# Built jars
+*.jar
