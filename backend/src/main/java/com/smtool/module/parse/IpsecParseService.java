@@ -4,6 +4,7 @@ import com.smtool.util.CodecUtil;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -103,9 +104,17 @@ public class IpsecParseService {
         int major = version < 0 ? -1 : (version >> 4) & 0x0F;
         int minor = version < 0 ? -1 : version & 0x0F;
         boolean isV2 = major == 2;
-        header.put("version", version < 0 ? null
-                : String.format("0x%02x", version) + " (IKEv" + major + "." + minor
-                + (isV2 ? " / IKEv2" : (major == 1 ? " / IKEv1" : "")) + ")");
+        String versionText;
+        if (version < 0) {
+            versionText = null;
+        } else if (isV2) {
+            versionText = String.format("0x%02x", version) + " (IKEv2)";
+        } else if (major == 1) {
+            versionText = String.format("0x%02x", version) + " (ISAKMP " + major + "." + minor + " / IKEv1)";
+        } else {
+            versionText = String.format("0x%02x", version) + " (ISAKMP " + major + "." + minor + ")";
+        }
+        header.put("version", versionText);
 
         int exchangeType = r.u8();
         Map<Integer, String> exTable = isV2 ? EXCHANGE_TYPES_V2 : EXCHANGE_TYPES_V1;
@@ -119,6 +128,12 @@ public class IpsecParseService {
         header.put("messageId", messageId < 0 ? null : String.format("0x%08x", messageId));
         long length = r.u32();
         header.put("length", length < 0 ? null : length);
+
+        // 校验 ISAKMP 长度字段
+        if (length >= 0 && length > data.length) {
+            result.put("truncated", true);
+            result.put("note", "ISAKMP header length 字段（" + length + "）超过实际数据长度（" + data.length + "）");
+        }
 
         // 头部的 next payload 是 payload 链第一个 payload 的类型
         Map<Integer, String> plTable = isV2 ? PAYLOAD_TYPES_V2 : PAYLOAD_TYPES_V1;
@@ -158,6 +173,51 @@ public class IpsecParseService {
         return result;
     }
 
+    /**
+     * 解析一段字节中的 payload 链（不含 ISAKMP 头部）。
+     * 用于解密后的 IKE 明文载荷二次解析。
+     */
+    public List<Map<String, Object>> parsePayloadChain(byte[] data) {
+        return parsePayloadChain(data, false);
+    }
+
+    /**
+     * 解析一段字节中的 payload 链（不含 ISAKMP 头部）。
+     *
+     * @param data 明文 payload 字节
+     * @param isV2 是否按 IKEv2 payload 类型映射
+     */
+    public List<Map<String, Object>> parsePayloadChain(byte[] data, boolean isV2) {
+        List<Map<String, Object>> payloads = new ArrayList<>();
+        if (data == null || data.length < 4) {
+            return payloads;
+        }
+        Map<Integer, String> plTable = isV2 ? PAYLOAD_TYPES_V2 : PAYLOAD_TYPES_V1;
+        ByteReader r = new ByteReader(data);
+        // 第一个字节是 payload 链中第一个 payload 的类型
+        int curType = r.u8();
+        int guard = 0;
+        while (curType > 0 && r.has(3) && guard++ < 64) {
+            Map<String, Object> p = new LinkedHashMap<>();
+            p.put("payloadType", curType + " (" + plTable.getOrDefault(curType, "未知") + ")");
+            p.put("payloadTypeCode", curType);
+            int next = r.u8();
+            int critReserved = r.u8();
+            p.put("critical", critReserved < 0 ? null : ((critReserved & 0x80) != 0));
+            int plen = r.u16();
+            p.put("payloadLength", plen);
+            int dataLen = plen < 4 ? 0 : plen - 4;
+            byte[] body = r.bytes(dataLen);
+            p.put("data", CodecUtil.toHex(body));
+            payloads.add(p);
+            if (next <= 0 || plen < 4) {
+                break;
+            }
+            curType = next;
+        }
+        return payloads;
+    }
+
     /** 解析 flags 字段 */
     private String describeFlags(int flags, boolean isV2) {
         List<String> set = new ArrayList<>();
@@ -185,5 +245,26 @@ public class IpsecParseService {
             }
         }
         return String.format("0x%02x", flags) + (set.isEmpty() ? "" : " (" + String.join(", ", set) + ")");
+    }
+
+    /**
+     * 从 UDP payload 中提取 ISAKMP 消息，处理 NAT-T Non-ESP Marker。
+     * <p>
+     * UDP/4500 的 IKE 消息前 4 字节为 0x00 00 00 00（Non-ESP Marker）；
+     * Marker-only 包返回空字节数组而不是被跳过。
+     */
+    public static byte[] stripNattMarker(byte[] payload, int srcPort, int dstPort) {
+        if (payload == null) {
+            return new byte[0];
+        }
+        if (srcPort == 4500 || dstPort == 4500) {
+            if (payload.length >= 4 && payload[0] == 0 && payload[1] == 0 && payload[2] == 0 && payload[3] == 0) {
+                if (payload.length == 4) {
+                    return new byte[0];
+                }
+                return Arrays.copyOfRange(payload, 4, payload.length);
+            }
+        }
+        return payload;
     }
 }

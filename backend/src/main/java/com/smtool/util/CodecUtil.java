@@ -71,6 +71,9 @@ public final class CodecUtil {
     }
 
     public static byte[] fromHex(String hex) {
+        if (hex == null) {
+            throw new IllegalArgumentException("hex 字符串不能为 null");
+        }
         return Hex.decode(cleanHex(hex));
     }
 

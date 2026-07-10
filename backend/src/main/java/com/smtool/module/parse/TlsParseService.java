@@ -22,8 +22,6 @@ public class TlsParseService {
     private static final Map<Integer, String> VERSIONS = new LinkedHashMap<>();
     /** handshake 类型映射 */
     private static final Map<Integer, String> HANDSHAKE_TYPES = new LinkedHashMap<>();
-    /** 密码套件映射（含标准套件与国密 TLCP 套件） */
-    private static final Map<Integer, String> CIPHER_SUITES = new LinkedHashMap<>();
     /** 扩展类型映射 */
     private static final Map<Integer, String> EXTENSIONS = new LinkedHashMap<>();
 
@@ -51,33 +49,6 @@ public class TlsParseService {
         HANDSHAKE_TYPES.put(15, "certificate_verify");
         HANDSHAKE_TYPES.put(16, "client_key_exchange");
         HANDSHAKE_TYPES.put(20, "finished");
-
-        // 国密 TLCP / GM 套件
-        CIPHER_SUITES.put(0xe011, "ECC_SM4_SM3（国密）");
-        CIPHER_SUITES.put(0xe013, "ECDHE_SM4_SM3（国密）");
-        CIPHER_SUITES.put(0xe015, "ECC_SM4_GCM_SM3（国密）");
-        CIPHER_SUITES.put(0xe019, "IBSDH_SM4_SM3（国密）");
-        CIPHER_SUITES.put(0xe01c, "RSA_SM4_SM3（国密）");
-        CIPHER_SUITES.put(0x00c6, "TLS_SM4_GCM_SM3（国密, TLS1.3）");
-        CIPHER_SUITES.put(0x00c7, "TLS_SM4_CCM_SM3（国密, TLS1.3）");
-        // 常见标准套件
-        CIPHER_SUITES.put(0x0000, "TLS_NULL_WITH_NULL_NULL");
-        CIPHER_SUITES.put(0x002f, "TLS_RSA_WITH_AES_128_CBC_SHA");
-        CIPHER_SUITES.put(0x0035, "TLS_RSA_WITH_AES_256_CBC_SHA");
-        CIPHER_SUITES.put(0x009c, "TLS_RSA_WITH_AES_128_GCM_SHA256");
-        CIPHER_SUITES.put(0x009d, "TLS_RSA_WITH_AES_256_GCM_SHA384");
-        CIPHER_SUITES.put(0xc013, "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA");
-        CIPHER_SUITES.put(0xc014, "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA");
-        CIPHER_SUITES.put(0xc02b, "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256");
-        CIPHER_SUITES.put(0xc02c, "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384");
-        CIPHER_SUITES.put(0xc02f, "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256");
-        CIPHER_SUITES.put(0xc030, "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384");
-        CIPHER_SUITES.put(0xcca8, "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256");
-        CIPHER_SUITES.put(0xcca9, "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256");
-        CIPHER_SUITES.put(0x1301, "TLS_AES_128_GCM_SHA256（TLS1.3）");
-        CIPHER_SUITES.put(0x1302, "TLS_AES_256_GCM_SHA384（TLS1.3）");
-        CIPHER_SUITES.put(0x1303, "TLS_CHACHA20_POLY1305_SHA256（TLS1.3）");
-        CIPHER_SUITES.put(0x00ff, "TLS_EMPTY_RENEGOTIATION_INFO_SCSV");
 
         EXTENSIONS.put(0, "server_name");
         EXTENSIONS.put(1, "max_fragment_length");
@@ -119,10 +90,27 @@ public class TlsParseService {
         record.put("length", recordLength);
         result.put("record", record);
 
-        // 仅当为 handshake(22) 时解析握手层
+        // 校验 record length 与实际字节数
+        int recordBodyAvailable = r.remaining();
+        if (recordLength > recordBodyAvailable) {
+            record.put("truncated", true);
+            result.put("note", "Record 声明长度 " + recordLength + " 超过实际剩余字节 " + recordBodyAvailable);
+            result.put("truncated", true);
+            return result;
+        }
+
+        // 仅当为 handshake(22) 时解析握手层，使用限定范围的 Reader 防止越界
         if (contentType == 22) {
-            result.put("handshake", parseHandshake(r, result));
+            int handshakeBytes = Math.min(recordLength, recordBodyAvailable);
+            byte[] hsData = r.bytes(handshakeBytes);
+            ByteReader hr = new ByteReader(hsData);
+            result.put("handshake", parseHandshake(hr, result));
+            if (hr.isTruncated()) {
+                result.put("truncated", true);
+            }
         } else if (contentType >= 0) {
+            // 跳过当前 record 的 payload 字节
+            r.bytes(recordLength);
             result.put("note", "非 handshake 报文（contentType=" + contentType + "），仅解析 Record 层");
         }
 
@@ -140,98 +128,117 @@ public class TlsParseService {
         int hsLength = r.u24();
         hs.put("length", hsLength);
 
+        // 按 hsLength 限制子 Reader，避免越界或读取到下一条消息
+        byte[] hsBody = r.bytes(hsLength < 0 ? 0 : hsLength);
+        ByteReader br = new ByteReader(hsBody);
+
         // client_version / server_version（ClientHello、ServerHello 均以 2 字节版本开头）
-        int hsVersion = r.u16();
+        int hsVersion = br.u16();
         hs.put(hsType == 2 ? "server_version" : "client_version", describeVersion(hsVersion));
         hs.put(hsType == 2 ? "server_version_value" : "client_version_value", hsVersion);
 
         // random(32B)
-        byte[] random = r.bytes(32);
+        byte[] random = br.bytes(32);
         hs.put("random", CodecUtil.toHex(random));
 
         // sessionId
-        int sidLen = r.u8();
+        int sidLen = br.u8();
         hs.put("sessionIdLength", sidLen);
-        byte[] sid = r.bytes(sidLen < 0 ? 0 : sidLen);
+        byte[] sid = br.bytes(sidLen < 0 ? 0 : sidLen);
         hs.put("sessionId", CodecUtil.toHex(sid));
 
         boolean isGmSuite = false;
 
         if (hsType == 1) {
             // ===== ClientHello：cipherSuites 是列表 =====
-            int csBytes = r.u16();
+            int csBytes = br.u16();
             hs.put("cipherSuitesLength", csBytes);
             List<Map<String, Object>> suites = new ArrayList<>();
-            int count = csBytes < 0 ? 0 : csBytes / 2;
-            for (int i = 0; i < count; i++) {
-                int cs = r.u16();
-                if (cs < 0) {
-                    break;
+            if (csBytes < 0) {
+                // 已截断，不解析
+            } else if ((csBytes & 0x01) != 0) {
+                hs.put("cipherSuitesError", "密码套件长度为奇数（" + csBytes + "），停止解析套件列表");
+                root.put("truncated", true);
+            } else {
+                int count = csBytes / 2;
+                for (int i = 0; i < count; i++) {
+                    int cs = br.u16();
+                    if (cs < 0) {
+                        break;
+                    }
+                    Map<String, Object> s = buildCipherSuite(cs);
+                    suites.add(s);
+                    boolean gm = Boolean.TRUE.equals(s.get("gm"));
+                    isGmSuite = isGmSuite || gm;
                 }
-                Map<String, Object> s = new LinkedHashMap<>();
-                s.put("value", String.format("0x%04x", cs));
-                s.put("name", CIPHER_SUITES.getOrDefault(cs, "未知套件"));
-                boolean gm = isGmSuite(cs);
-                s.put("gm", gm);
-                isGmSuite = isGmSuite || gm;
-                suites.add(s);
             }
             hs.put("cipherSuites", suites);
 
             // compressionMethods
-            int cmLen = r.u8();
+            int cmLen = br.u8();
             hs.put("compressionMethodsLength", cmLen);
-            byte[] cm = r.bytes(cmLen < 0 ? 0 : cmLen);
+            byte[] cm = br.bytes(cmLen < 0 ? 0 : cmLen);
             hs.put("compressionMethods", CodecUtil.toHex(cm));
         } else if (hsType == 2) {
             // ===== ServerHello：单个 cipher_suite =====
-            int cs = r.u16();
-            Map<String, Object> s = new LinkedHashMap<>();
-            s.put("value", String.format("0x%04x", cs));
-            s.put("name", CIPHER_SUITES.getOrDefault(cs, "未知套件"));
-            boolean gm = isGmSuite(cs);
-            s.put("gm", gm);
-            isGmSuite = gm;
+            int cs = br.u16();
+            Map<String, Object> s = buildCipherSuite(cs);
+            isGmSuite = Boolean.TRUE.equals(s.get("gm"));
             hs.put("cipherSuite", s);
             // compressionMethod（单字节）
-            int cm = r.u8();
+            int cm = br.u8();
             hs.put("compressionMethod", cm < 0 ? null : String.format("0x%02x", cm));
         }
 
         // ===== extensions（ClientHello / ServerHello 通用）=====
-        if (r.has(2)) {
-            int extTotal = r.u16();
+        if (br.has(2)) {
+            int extTotal = br.u16();
             hs.put("extensionsLength", extTotal);
             List<Map<String, Object>> exts = new ArrayList<>();
-            int endLimit = r.position() + (extTotal < 0 ? 0 : extTotal);
-            while (r.position() < endLimit && r.has(4)) {
-                int extType = r.u16();
-                int extLen = r.u16();
-                Map<String, Object> ext = new LinkedHashMap<>();
-                ext.put("type", String.format("0x%04x", extType)
-                        + " (" + EXTENSIONS.getOrDefault(extType, "未知扩展") + ")");
-                ext.put("length", extLen);
-                byte[] extData = r.bytes(extLen < 0 ? 0 : extLen);
-                ext.put("data", CodecUtil.toHex(extData));
-                exts.add(ext);
+            if (extTotal < 0 || extTotal > br.remaining()) {
+                hs.put("extensionsError", "extensions 总长度越界（" + extTotal + " > 剩余 " + br.remaining() + "）");
+                root.put("truncated", true);
+            } else {
+                int extEnd = br.position() + extTotal;
+                while (br.position() < extEnd && br.has(4)) {
+                    int extType = br.u16();
+                    int extLen = br.u16();
+                    int remainingInExtensions = extEnd - br.position();
+                    if (extLen < 0 || extLen > remainingInExtensions) {
+                        hs.put("extensionsError", "扩展 0x" + String.format("%04x", extType)
+                                + " 长度越界（" + extLen + "）");
+                        root.put("truncated", true);
+                        br.bytes(br.remaining()); // 消费剩余，避免死循环
+                        break;
+                    }
+                    Map<String, Object> ext = new LinkedHashMap<>();
+                    ext.put("type", String.format("0x%04x", extType)
+                            + " (" + EXTENSIONS.getOrDefault(extType, "未知扩展") + ")");
+                    ext.put("length", extLen);
+                    byte[] extData = br.bytes(extLen);
+                    ext.put("data", CodecUtil.toHex(extData));
+                    // supported_versions 扩展做语义化解析
+                    if (extType == 43 && extData.length >= 2) {
+                        parseSupportedVersions(ext, extData, hsType);
+                    }
+                    exts.add(ext);
+                }
             }
             hs.put("extensions", exts);
         }
 
+        if (br.isTruncated()) {
+            root.put("truncated", true);
+            hs.put("truncated", true);
+        }
         // 将国密套件标记提升到顶层
         root.put("isGmSuite", isGmSuite);
         return hs;
     }
 
-    /** 判断是否为国密 / TLCP 套件（0xe0xx 区间或已知 GM 套件编号） */
+    /** 判断是否为国密 / TLCP 套件 */
     public boolean isGmSuite(int cs) {
-        if (cs < 0) {
-            return false;
-        }
-        if ((cs & 0xff00) == 0xe000) {
-            return true;
-        }
-        return cs == 0x00c6 || cs == 0x00c7;
+        return TlsCipherSuites.isGmSuite(cs);
     }
 
     /** 通用整型映射描述：返回 "0xNN (名称)" */
@@ -251,13 +258,38 @@ public class TlsParseService {
     }
 
     /**
+     * 解析 supported_versions 扩展。
+     * <ul>
+     *     <li>ClientHello: versions_len(1) + [version(2)...]</li>
+     *     <li>ServerHello: selected_version(2)</li>
+     * </ul>
+     */
+    private void parseSupportedVersions(Map<String, Object> ext, byte[] data, int hsType) {
+        if (hsType == 2) {
+            // ServerHello: 单个 selected_version
+            int version = ((data[0] & 0xff) << 8) | (data[1] & 0xff);
+            ext.put("selectedVersion", describeVersion(version));
+            ext.put("selectedVersionValue", version);
+        } else {
+            // ClientHello: 版本列表
+            int listLen = data[0] & 0xff;
+            List<String> versions = new ArrayList<>();
+            for (int i = 0; i < listLen / 2 && 1 + i * 2 + 1 < data.length; i++) {
+                int v = ((data[1 + i * 2] & 0xff) << 8) | (data[1 + i * 2 + 1] & 0xff);
+                versions.add(describeVersion(v));
+            }
+            ext.put("supportedVersions", versions);
+        }
+    }
+
+    /**
      * 构建密码套件描述对象。
      */
     public Map<String, Object> buildCipherSuite(int cs) {
         Map<String, Object> s = new LinkedHashMap<>();
         s.put("value", String.format("0x%04x", cs));
-        s.put("name", CIPHER_SUITES.getOrDefault(cs, "未知套件"));
-        s.put("gm", isGmSuite(cs));
+        s.put("name", TlsCipherSuites.getName(cs));
+        s.put("gm", TlsCipherSuites.isGmSuite(cs));
         return s;
     }
 

@@ -53,10 +53,10 @@
           </el-radio-group>
         </div>
         <div class="row">
-          <el-input v-model="salt" placeholder="可选">
+          <el-input v-model="salt" placeholder="可选" style="flex: 1">
             <template #suffix>{{ byteLen(salt, saltFormat) }}</template>
           </el-input>
-          <el-radio-group v-model="saltPosition" size="default" style="margin-left: 8px">
+          <el-radio-group v-model="saltPosition" size="default" style="margin-left: 8px; flex-shrink: 0; flex-wrap: nowrap;">
             <el-radio-button value="pre">前置</el-radio-button>
             <el-radio-button value="post">后置</el-radio-button>
           </el-radio-group>
@@ -74,7 +74,7 @@
         </div>
         <div class="row">
           <el-input v-model="key" placeholder="HMAC 密钥">
-            <template #suffix>{{ byteLen(key, keyFormat) }}</template>
+            <template #suffix>{{ keyCharLen() }}</template>
           </el-input>
           <el-button size="default" style="margin-left: 8px" @click="genKey(16)">128 位密钥</el-button>
           <el-button size="default" @click="genKey(32)">256 位密钥</el-button>
@@ -136,6 +136,11 @@ function byteLen(str, fmt) {
     }
     return new TextEncoder().encode(str).length
   } catch { return 0 }
+}
+
+function keyCharLen() {
+  if (!key.value) return 0
+  return key.value.replace(/[\s\r\n]/g, '').length
 }
 
 function copy(text) {

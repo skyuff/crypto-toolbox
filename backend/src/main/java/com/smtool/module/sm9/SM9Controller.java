@@ -72,6 +72,7 @@ public class SM9Controller {
     public ApiResponse<Map<String, Object>> decrypt(@RequestBody Map<String, String> req) {
         return ApiResponse.ok(sm9Service.decrypt(
                 req.get("userPrivateKey"),
+                req.get("userId"),
                 req.get("ciphertext"),
                 req.getOrDefault("mode", "block")
         ));
@@ -89,6 +90,7 @@ public class SM9Controller {
     public ApiResponse<Map<String, Object>> decapsulate(@RequestBody Map<String, String> req) {
         return ApiResponse.ok(sm9Service.decapsulate(
                 req.get("userPrivateKey"),
+                req.get("userId"),
                 req.get("encapsulatedKey")
         ));
     }

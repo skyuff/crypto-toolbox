@@ -354,11 +354,18 @@ function byteLen(str, fmt) {
 }
 function copy(t) { if (t) navigator.clipboard.writeText(t).then(()=>ElMessage.success('已复制')) }
 async function run(fn) { loading.value=true; try { return await fn() } finally { loading.value=false } }
+function extractError(e) {
+  if (!e) return '请求失败'
+  const msg = e.response?.data?.message
+  if (msg) return msg
+  if (e.response?.data) return String(e.response.data)
+  return e.message || '请求失败'
+}
 
 // ---------- 1 曲线参数 ----------
 const curve = reactive({ curveEquation:'', t:'', p:'', n:'', g1X:'', g1Y:'', g2X:'', g2Y:'' })
 async function loadCurve() {
-  try { Object.assign(curve, await api.get('/sm9/curve-params')) } catch {}
+  try { Object.assign(curve, await api.get('/sm9/curve-params')) } catch (e) { ElMessage.error('加载曲线参数失败：' + extractError(e)) }
 }
 onMounted(loadCurve)
 
@@ -369,16 +376,20 @@ const ko = reactive({
   userPrivateKey:'', userPrivFmt:'hex'
 })
 async function genMasterKey() {
-  const k = await run(()=>api.post('/sm9/master-key-pair', { type: ko.keyType }))
-  ko.publicKey = k.masterPublicKey; ko.privateKey = k.masterPrivateKey
-  ElMessage.success('已生成主密钥对')
+  try {
+    const k = await run(()=>api.post('/sm9/master-key-pair', { type: ko.keyType }))
+    ko.publicKey = k.masterPublicKey; ko.privateKey = k.masterPrivateKey
+    ElMessage.success('已生成主密钥对')
+  } catch (e) { ElMessage.error(extractError(e) || '生成主密钥对失败') }
 }
 async function genUserKey() {
   if (!ko.privateKey) return ElMessage.warning('请先生成或填写主私钥')
   if (!ko.userId) return ElMessage.warning('请填写用户标识')
-  const r = await run(()=>api.post('/sm9/user-key', { type: ko.keyType, masterPrivateKey: ko.privateKey, userId: ko.userId }))
-  ko.userPrivateKey = r.userPrivateKey
-  ElMessage.success('已生成用户私钥')
+  try {
+    const r = await run(()=>api.post('/sm9/user-key', { type: ko.keyType, masterPrivateKey: ko.privateKey, userId: ko.userId }))
+    ko.userPrivateKey = r.userPrivateKey
+    ElMessage.success('已生成用户私钥')
+  } catch (e) { ElMessage.error(extractError(e) || '生成用户私钥失败') }
 }
 function cleanKo() {
   ko.publicKey=ko.publicKey.replace(/[\s\r\n]/g,'')
@@ -399,31 +410,35 @@ async function doSign() {
   if (!sg.publicKey) return ElMessage.warning('请填写签名主公钥')
   if (!sg.privateKey) return ElMessage.warning('请填写用户签名私钥')
   if (!sg.message) return ElMessage.warning('请填写消息')
-  const r = await run(()=>api.post('/sm9/sign', {
-    masterPublicKey: sg.publicKey,
-    userPrivateKey: sg.privateKey,
-    userId: sg.userId,
-    message: sg.message
-  }))
-  sg.signature = r.signature
-  sg.result = '签名成功'
-  sg.resultType = 'success'
-  ElMessage.success('签名成功')
+  try {
+    const r = await run(()=>api.post('/sm9/sign', {
+      masterPublicKey: sg.publicKey,
+      userPrivateKey: sg.privateKey,
+      userId: sg.userId,
+      message: sg.message
+    }))
+    sg.signature = r.signature
+    sg.result = '签名成功'
+    sg.resultType = 'success'
+    ElMessage.success('签名成功')
+  } catch (e) { ElMessage.error(extractError(e) || '签名失败') }
 }
 async function doVerify() {
   if (!sg.publicKey) return ElMessage.warning('请填写签名主公钥')
   if (!sg.userId) return ElMessage.warning('请填写用户标识')
   if (!sg.message) return ElMessage.warning('请填写消息')
   if (!sg.signature) return ElMessage.warning('请填写签名值')
-  const r = await run(()=>api.post('/sm9/verify', {
-    masterPublicKey: sg.publicKey,
-    userId: sg.userId,
-    message: sg.message,
-    signature: sg.signature
-  }))
-  sg.result = r.message
-  sg.resultType = r.verified ? 'success' : 'error'
-  ElMessage[r.verified ? 'success' : 'error'](r.message)
+  try {
+    const r = await run(()=>api.post('/sm9/verify', {
+      masterPublicKey: sg.publicKey,
+      userId: sg.userId,
+      message: sg.message,
+      signature: sg.signature
+    }))
+    sg.result = r.message
+    sg.resultType = r.verified ? 'success' : 'error'
+    ElMessage[r.verified ? 'success' : 'error'](r.message)
+  } catch (e) { ElMessage.error(extractError(e) || '验签失败') }
 }
 function cleanSg() {
   sg.publicKey=sg.publicKey.replace(/[\s\r\n]/g,'')
@@ -445,25 +460,31 @@ async function doEncrypt() {
   if (!en.publicKey) return ElMessage.warning('请填写加密主公钥')
   if (!en.userId) return ElMessage.warning('请填写用户标识')
   if (!en.plaintext) return ElMessage.warning('请填写明文')
-  const r = await run(()=>api.post('/sm9/encrypt', {
-    masterPublicKey: en.publicKey,
-    userId: en.userId,
-    message: en.plaintext,
-    mode: en.mode
-  }))
-  en.ciphertext = r.ciphertext
-  ElMessage.success('加密成功')
+  try {
+    const r = await run(()=>api.post('/sm9/encrypt', {
+      masterPublicKey: en.publicKey,
+      userId: en.userId,
+      message: en.plaintext,
+      mode: en.mode
+    }))
+    en.ciphertext = r.ciphertext
+    ElMessage.success('加密成功')
+  } catch (e) { ElMessage.error(extractError(e) || '加密失败') }
 }
 async function doDecrypt() {
   if (!en.privateKey) return ElMessage.warning('请填写用户解密私钥')
+  if (!en.userId) return ElMessage.warning('请填写用户标识')
   if (!en.ciphertext) return ElMessage.warning('请填写密文')
-  const r = await run(()=>api.post('/sm9/decrypt', {
-    userPrivateKey: en.privateKey,
-    ciphertext: en.ciphertext,
-    mode: en.mode
-  }))
-  en.plaintext = r.plaintext
-  ElMessage.success('解密成功')
+  try {
+    const r = await run(()=>api.post('/sm9/decrypt', {
+      userPrivateKey: en.privateKey,
+      userId: en.userId,
+      ciphertext: en.ciphertext,
+      mode: en.mode
+    }))
+    en.plaintext = r.plaintext
+    ElMessage.success('解密成功')
+  } catch (e) { ElMessage.error(extractError(e) || '解密失败') }
 }
 function cleanEn() {
   en.publicKey=en.publicKey.replace(/[\s\r\n]/g,'')
@@ -483,23 +504,29 @@ const km = reactive({
 async function doEncapsulate() {
   if (!km.publicKey) return ElMessage.warning('请填写加密主公钥')
   if (!km.userId) return ElMessage.warning('请填写用户标识')
-  const r = await run(()=>api.post('/sm9/encapsulate', {
-    masterPublicKey: km.publicKey,
-    userId: km.userId
-  }))
-  km.encapsulatedKey = r.encapsulatedKey
-  km.sharedKey = r.sharedKey
-  ElMessage.success('密钥封装成功')
+  try {
+    const r = await run(()=>api.post('/sm9/encapsulate', {
+      masterPublicKey: km.publicKey,
+      userId: km.userId
+    }))
+    km.encapsulatedKey = r.encapsulatedKey
+    km.sharedKey = r.sharedKey
+    ElMessage.success('密钥封装成功')
+  } catch (e) { ElMessage.error(extractError(e) || '密钥封装失败') }
 }
 async function doDecapsulate() {
   if (!km.privateKey) return ElMessage.warning('请填写用户解封装私钥')
+  if (!km.userId) return ElMessage.warning('请填写用户标识')
   if (!km.encapsulatedKey) return ElMessage.warning('请填写封装密钥')
-  const r = await run(()=>api.post('/sm9/decapsulate', {
-    userPrivateKey: km.privateKey,
-    encapsulatedKey: km.encapsulatedKey
-  }))
-  km.sharedKey = r.sharedKey
-  ElMessage.success('密钥解封装成功')
+  try {
+    const r = await run(()=>api.post('/sm9/decapsulate', {
+      userPrivateKey: km.privateKey,
+      userId: km.userId,
+      encapsulatedKey: km.encapsulatedKey
+    }))
+    km.sharedKey = r.sharedKey
+    ElMessage.success('密钥解封装成功')
+  } catch (e) { ElMessage.error(extractError(e) || '密钥解封装失败') }
 }
 function cleanKm() {
   km.publicKey=km.publicKey.replace(/[\s\r\n]/g,'')
@@ -522,14 +549,16 @@ async function doExchange() {
   if (!ex.userIdA) return ElMessage.warning('请填写用户A标识')
   if (!ex.publicKeyB) return ElMessage.warning('请填写用户B主公钥')
   if (!ex.userIdB) return ElMessage.warning('请填写用户B标识')
-  const r = await run(()=>api.post('/sm9/key-agreement', {
-    privateKeyA: ex.privateKeyA,
-    userIdA: ex.userIdA,
-    publicKeyB: ex.publicKeyB,
-    userIdB: ex.userIdB
-  }))
-  ex.result = r
-  ElMessage.success('密钥协商成功')
+  try {
+    const r = await run(()=>api.post('/sm9/key-agreement', {
+      privateKeyA: ex.privateKeyA,
+      userIdA: ex.userIdA,
+      publicKeyB: ex.publicKeyB,
+      userIdB: ex.userIdB
+    }))
+    ex.result = r
+    ElMessage.success('密钥协商成功')
+  } catch (e) { ElMessage.error(extractError(e) || '密钥协商失败') }
 }
 function cleanEx() {
   ex.privateKeyA=ex.privateKeyA.replace(/[\s\r\n]/g,'')

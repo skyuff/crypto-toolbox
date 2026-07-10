@@ -1,6 +1,7 @@
 package com.smtool.module.cert;
 
 import com.smtool.util.CodecUtil;
+import org.bouncycastle.asn1.ASN1Encodable;
 import org.bouncycastle.asn1.ASN1ObjectIdentifier;
 import org.bouncycastle.asn1.x509.AuthorityKeyIdentifier;
 import org.bouncycastle.asn1.x509.BasicConstraints;
@@ -81,10 +82,9 @@ public class CertCheckService {
         String pkAlg = cert.getPublicKey().getAlgorithm();
         byte[] pkEncoded = cert.getPublicKey().getEncoded();
         boolean isSm2 = false;
-        // 判断是否 SM2：EC 公钥且曲线 OID 为 sm2p256v1，或签名算法为 SM3withSM2
-        String pkCurveOid = holder.getSubjectPublicKeyInfo().getAlgorithm().getParameters() == null
-                ? null : holder.getSubjectPublicKeyInfo().getAlgorithm().getParameters().toString();
-        if ("1.2.156.10197.1.301".equals(pkCurveOid) || "1.2.156.10197.1.501".equals(sigOid)) {
+        // 判断是否 SM2：EC 公钥且曲线 OID 为 sm2p256v1，或签名算法为国密 SM2 系列
+        String pkCurveOid = extractCurveOid(holder.getSubjectPublicKeyInfo().getAlgorithm().getParameters());
+        if ("1.2.156.10197.1.301".equals(pkCurveOid) || isSm2SignatureAlgorithm(sigOid)) {
             isSm2 = true;
             pkAlg = "SM2";
         }
@@ -115,6 +115,28 @@ public class CertCheckService {
         result.put("checks", checks);
 
         return result;
+    }
+
+    private boolean isSm2SignatureAlgorithm(String sigOid) {
+        return "1.2.156.10197.1.501".equals(sigOid)
+                || "1.2.156.10197.1.502".equals(sigOid)
+                || "1.2.156.10197.1.503".equals(sigOid)
+                || "1.2.156.10197.1.504".equals(sigOid)
+                || "1.2.156.10197.1.505".equals(sigOid)
+                || "1.2.156.10197.1.506".equals(sigOid);
+    }
+
+    /** 从算法参数中安全提取曲线 OID，避免依赖 toString() */
+    private String extractCurveOid(ASN1Encodable parameters) {
+        if (parameters == null) {
+            return null;
+        }
+        try {
+            ASN1ObjectIdentifier oid = ASN1ObjectIdentifier.getInstance(parameters);
+            return oid == null ? null : oid.getId();
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /** 解析证书扩展项列表 */
@@ -235,6 +257,9 @@ public class CertCheckService {
             boolean inValidityPeriod = now.after(cert.getNotBefore()) && now.before(cert.getNotAfter());
             node.put("expired", !inValidityPeriod);
 
+            boolean isCa = cert.getBasicConstraints() >= 0;
+            node.put("isCa", isCa);
+
             boolean signatureValid = false;
             String signatureError = null;
             if (i == 0) {
@@ -253,6 +278,24 @@ public class CertCheckService {
                 if (!issuerMatch) {
                     signatureError = "父证书主题与当前证书颁发者不匹配";
                 }
+
+                // 检查父节点是否为 CA 以及 pathLenConstraint
+                boolean parentIsCa = parent.getBasicConstraints() >= 0;
+                node.put("parentIsCa", parentIsCa);
+                if (!parentIsCa) {
+                    signatureError = signatureError == null
+                            ? "父证书未设置 CA 标志，不能签发证书"
+                            : signatureError + "; 父证书未设置 CA 标志，不能签发证书";
+                }
+
+                boolean pathLenOk = checkPathLenConstraint(chain, i);
+                node.put("pathLenOk", pathLenOk);
+                if (!pathLenOk) {
+                    signatureError = signatureError == null
+                            ? "父证书 pathLenConstraint 不足"
+                            : signatureError + "; 父证书 pathLenConstraint 不足";
+                }
+
                 try {
                     cert.verify(parent.getPublicKey());
                     signatureValid = true;
@@ -264,8 +307,8 @@ public class CertCheckService {
             }
             node.put("signatureValid", signatureValid);
             node.put("signatureError", signatureError);
-            node.put("valid", inValidityPeriod && signatureValid);
-            if (!inValidityPeriod || !signatureValid) {
+            node.put("valid", inValidityPeriod && signatureValid && signatureError == null);
+            if (!inValidityPeriod || !signatureValid || signatureError != null) {
                 chainValid = false;
             }
             nodeResults.add(node);
@@ -277,6 +320,31 @@ public class CertCheckService {
         result.put("errors", errors);
         result.put("nodes", nodeResults);
         return result;
+    }
+
+    /**
+     * 检查父证书的 pathLenConstraint 是否允许从当前证书到链尾的路径。
+     * 父证书位于 chain[i-1]，统计从 i 开始到倒数第二张（含）之间的 CA 证书数量作为
+     * 需要满足的 pathLenConstraint（end-entity 不计入）。
+     */
+    private boolean checkPathLenConstraint(List<X509Certificate> chain, int childIndex) {
+        if (childIndex <= 0 || childIndex >= chain.size()) {
+            return true;
+        }
+        X509Certificate parent = chain.get(childIndex - 1);
+        int parentPathLen = parent.getBasicConstraints();
+        // -1 表示不是 CA；Integer.MAX_VALUE 表示无限制
+        if (parentPathLen < 0 || parentPathLen == Integer.MAX_VALUE) {
+            return parentPathLen >= 0;
+        }
+        int intermediateCaCount = 0;
+        // 从当前证书开始到倒数第二张（不含最后的 end-entity）统计 CA 数量
+        for (int k = childIndex; k < chain.size() - 1; k++) {
+            if (chain.get(k).getBasicConstraints() >= 0) {
+                intermediateCaCount++;
+            }
+        }
+        return intermediateCaCount <= parentPathLen;
     }
 
     /** 构造单条检查结果 */

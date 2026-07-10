@@ -131,6 +131,9 @@ public class SigAttackService {
 
     /** 按指定格式解码输入，统一输出为可解析的十六进制字符串 */
     private static String decodeInput(String value, String format) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException("签名攻击输入值不能为空");
+        }
         String cleaned = clean(value);
         if ("base64".equalsIgnoreCase(format)) {
             byte[] bytes = Base64.getDecoder().decode(cleaned);

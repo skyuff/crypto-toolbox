@@ -32,6 +32,8 @@ import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.spec.ECGenParameterSpec;
 import java.util.Base64;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -59,7 +61,8 @@ public class CertIssueService {
     /** 生成 PKCS#10 CSR。 */
     public Map<String, Object> generateCsr(CsrRequest req) throws Exception {
         boolean isSm2 = "SM2".equalsIgnoreCase(req.getAlgorithm());
-        KeyPair kp = generateKeyPair(isSm2);
+        int keySize = resolveRsaKeySize(req.getKeySize(), isSm2);
+        KeyPair kp = generateKeyPair(isSm2, keySize);
         X500Name subject = buildSubject(req);
         String sigAlg = isSm2 ? "SM3withSM2" : "SHA256withRSA";
 
@@ -81,7 +84,8 @@ public class CertIssueService {
     public Map<String, Object> issue(CertIssueRequest req) throws Exception {
         boolean isSm2 = "SM2".equalsIgnoreCase(req.getAlgorithm());
         String sigAlg = isSm2 ? "SM3withSM2" : "SHA256withRSA";
-        int validDays = (req.getValidMonths() == null || req.getValidMonths() <= 0 ? 12 : req.getValidMonths()) * 30;
+        int validMonths = req.getValidMonths() == null || req.getValidMonths() <= 0 ? 12 : req.getValidMonths();
+        int keySize = resolveRsaKeySize(req.getKeySize(), isSm2);
 
         X500Name subject;
         PublicKey publicKey;
@@ -111,14 +115,14 @@ public class CertIssueService {
                 signingKey = DerInputUtil.parsePrivateKey(req.getIssuerKeyPem());
                 issuer = new X500Name(issuerCert.getSubjectX500Principal().getName());
             } else {
-                KeyPair caKp = generateKeyPair(isSm2);
+                KeyPair caKp = generateKeyPair(isSm2, keySize);
                 signingKey = caKp.getPrivate();
                 issuer = subject;
                 issuerCert = null;
             }
         } else {
             // 直接生成模式：生成新密钥对并自签
-            KeyPair kp = generateKeyPair(isSm2);
+            KeyPair kp = generateKeyPair(isSm2, keySize);
             publicKey = kp.getPublic();
             subjectPrivateKey = kp.getPrivate();
             signingKey = kp.getPrivate();
@@ -129,7 +133,7 @@ public class CertIssueService {
 
         BigInteger serial = new BigInteger(64, new SecureRandom());
         Date notBefore = new Date();
-        Date notAfter = new Date(notBefore.getTime() + (long) validDays * 24 * 60 * 60 * 1000L);
+        Date notAfter = calculateNotAfter(notBefore, validMonths);
 
         X509v3CertificateBuilder certBuilder = new X509v3CertificateBuilder(
                 issuer, serial, notBefore, notAfter, subject,
@@ -199,16 +203,35 @@ public class CertIssueService {
         return s != null && !s.isBlank();
     }
 
+    /** 校验并解析 RSA 密钥长度；SM2 返回 0（忽略）。 */
+    private int resolveRsaKeySize(Integer requestedKeySize, boolean isSm2) {
+        if (isSm2) {
+            return 0;
+        }
+        int keySize = requestedKeySize == null || requestedKeySize <= 0 ? 2048 : requestedKeySize;
+        if (keySize != 2048 && keySize != 3072 && keySize != 4096) {
+            throw new IllegalArgumentException("RSA 密钥长度仅支持 2048/3072/4096");
+        }
+        return keySize;
+    }
+
     /** 按算法生成密钥对 */
-    private KeyPair generateKeyPair(boolean isSm2) throws Exception {
+    private KeyPair generateKeyPair(boolean isSm2, int keySize) throws Exception {
         if (isSm2) {
             KeyPairGenerator kpg = KeyPairGenerator.getInstance("EC", "BC");
             kpg.initialize(new ECGenParameterSpec("sm2p256v1"), new SecureRandom());
             return kpg.generateKeyPair();
         }
         KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA", "BC");
-        kpg.initialize(2048, new SecureRandom());
+        kpg.initialize(keySize, new SecureRandom());
         return kpg.generateKeyPair();
+    }
+
+    /** 使用 java.time 按月计算有效期结束时间，确保 12 个月等跨月计算准确。 */
+    private Date calculateNotAfter(Date notBefore, int validMonths) {
+        ZonedDateTime start = ZonedDateTime.ofInstant(notBefore.toInstant(), ZoneId.systemDefault());
+        ZonedDateTime end = start.plusMonths(validMonths);
+        return Date.from(end.toInstant());
     }
 
     /** 解析 PEM 格式的 PKCS#10 CSR */

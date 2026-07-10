@@ -21,16 +21,27 @@ public final class OidNames {
         MAP.put("1.2.840.10045.2.1", "ecPublicKey");
         MAP.put("1.2.840.10040.4.1", "dsa");
         MAP.put("1.2.156.10197.1.301", "sm2p256v1"); // SM2 曲线
+        MAP.put("1.3.101.112", "Ed25519");
+        MAP.put("1.3.101.113", "Ed448");
+        MAP.put("1.3.101.110", "X25519");
+        MAP.put("1.3.101.111", "X448");
         // 签名算法
         MAP.put("1.2.840.113549.1.1.5", "SHA1withRSA");
         MAP.put("1.2.840.113549.1.1.11", "SHA256withRSA");
         MAP.put("1.2.840.113549.1.1.12", "SHA384withRSA");
         MAP.put("1.2.840.113549.1.1.13", "SHA512withRSA");
+        MAP.put("1.2.840.113549.1.1.10", "RSASSA-PSS");
+        MAP.put("1.2.840.113549.1.1.14", "SHA224withRSA");
         MAP.put("1.2.840.10045.4.1", "SHA1withECDSA");
         MAP.put("1.2.840.10045.4.3.2", "SHA256withECDSA");
         MAP.put("1.2.840.10045.4.3.3", "SHA384withECDSA");
         MAP.put("1.2.840.10045.4.3.4", "SHA512withECDSA");
         MAP.put("1.2.156.10197.1.501", "SM3withSM2");
+        MAP.put("1.2.156.10197.1.502", "SM2withSM3");
+        MAP.put("1.2.156.10197.1.503", "SM2withSHA1");
+        MAP.put("1.2.156.10197.1.504", "SM2withSHA256");
+        MAP.put("1.2.156.10197.1.505", "SM2withSHA384");
+        MAP.put("1.2.156.10197.1.506", "SM2withSHA512");
         MAP.put("1.2.156.10197.1.401", "SM3"); // 杂凑算法
         MAP.put("1.2.156.10197.1.104", "SM4");
         // 常见摘要
@@ -40,12 +51,20 @@ public final class OidNames {
         MAP.put("1.3.14.3.2.26", "SHA-1");
         // DN 常见属性
         MAP.put("2.5.4.3", "CN(commonName)");
+        MAP.put("2.5.4.4", "SN(surname)");
+        MAP.put("2.5.4.5", "serialNumber");
         MAP.put("2.5.4.6", "C(countryName)");
         MAP.put("2.5.4.7", "L(localityName)");
         MAP.put("2.5.4.8", "ST(stateOrProvinceName)");
+        MAP.put("2.5.4.9", "streetAddress");
         MAP.put("2.5.4.10", "O(organizationName)");
         MAP.put("2.5.4.11", "OU(organizationalUnitName)");
+        MAP.put("2.5.4.12", "title");
+        MAP.put("2.5.4.41", "name");
+        MAP.put("2.5.4.42", "givenName");
         MAP.put("1.2.840.113549.1.9.1", "emailAddress");
+        MAP.put("0.9.2342.19200300.100.1.1", "uid(userID)");
+        MAP.put("0.9.2342.19200300.100.1.25", "DC(domainComponent)");
         // 证书扩展
         MAP.put("2.5.29.14", "subjectKeyIdentifier");
         MAP.put("2.5.29.15", "keyUsage");
@@ -53,9 +72,17 @@ public final class OidNames {
         MAP.put("2.5.29.19", "basicConstraints");
         MAP.put("2.5.29.31", "cRLDistributionPoints");
         MAP.put("2.5.29.32", "certificatePolicies");
+        MAP.put("2.5.29.32.0", "anyPolicy");
         MAP.put("2.5.29.35", "authorityKeyIdentifier");
         MAP.put("2.5.29.37", "extKeyUsage");
         MAP.put("1.3.6.1.5.5.7.1.1", "authorityInfoAccess");
+        // 扩展密钥用法 (EKU)
+        MAP.put("1.3.6.1.5.5.7.3.1", "serverAuth");
+        MAP.put("1.3.6.1.5.5.7.3.2", "clientAuth");
+        MAP.put("1.3.6.1.5.5.7.3.3", "codeSigning");
+        MAP.put("1.3.6.1.5.5.7.3.4", "emailProtection");
+        MAP.put("1.3.6.1.5.5.7.3.8", "timeStamping");
+        MAP.put("1.3.6.1.5.5.7.3.9", "OCSPSigning");
     }
 
     /** 返回 OID 对应的可读名称，未知则返回 null */

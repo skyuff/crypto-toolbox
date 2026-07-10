@@ -73,6 +73,8 @@ public class PcapngReader {
                 // capturedLen(4) + packetLen(4) + packetData(padded) + options
                 if (bodyLength >= 20) {
                     int interfaceId = readInt(bodyStart);
+                    int timestampHi = readInt(bodyStart + 4);
+                    int timestampLo = readInt(bodyStart + 8);
                     int capturedLen = readInt(bodyStart + 12);
                     int packetLen = readInt(bodyStart + 16);
                     int dataStart = bodyStart + 20;
@@ -82,19 +84,16 @@ public class PcapngReader {
                         System.arraycopy(data, dataStart, packetData, 0, capturedLen);
                         int linkType = interfaceLinkTypes.getOrDefault(interfaceId, 1);
 
+                        // 默认时间戳分辨率为 1e-6 秒（微秒），与常见 pcapng 一致
+                        long timestamp = ((long) timestampHi << 32) | (timestampLo & 0xffffffffL);
+
                         PcapPacket pkt = new PcapPacket();
-                        pkt.setTimestampMicros(0);
+                        pkt.setTimestampMicros(timestamp);
                         pkt.setLinkType(linkType);
                         pkt.setRaw(packetData);
                         PacketParser.parse(pkt);
                         if (pkt.getProtocol() != null) {
                             packets.add(pkt);
-                            if ("10.65.200.23".equals(pkt.getSrcIp()) && pkt.getSrcPort() == 2000 && pkt.getDstPort() == 55017) {
-                                System.out.println("[EPB-55017] cap=" + capturedLen + " raw=" + packetData.length
-                                        + " tcpOff=" + findTcpOffset(packetData)
-                                        + " seqBytes=" + bytesToHex(packetData, findTcpOffset(packetData), 4)
-                                        + " head=" + bytesToHex(packetData, 0, 30));
-                            }
                         }
                     }
                 }
@@ -148,40 +147,5 @@ public class PcapngReader {
 
     private static int padTo4(int len) {
         return (len + 3) & ~3;
-    }
-
-    private static int findTcpOffset(byte[] raw) {
-        if (raw == null || raw.length < 14) {
-            return -1;
-        }
-        int offset;
-        int etherType = ((raw[12] & 0xff) << 8) | (raw[13] & 0xff);
-        offset = 14;
-        while (etherType == 0x8100 || etherType == 0x88a8 || etherType == 0x9100) {
-            if (raw.length < offset + 4) {
-                return -1;
-            }
-            etherType = ((raw[offset + 2] & 0xff) << 8) | (raw[offset + 3] & 0xff);
-            offset += 4;
-        }
-        if (etherType == 0x0800) {
-            int ihl = raw[offset] & 0x0f;
-            return offset + ihl * 4;
-        } else if (etherType == 0x86dd) {
-            return offset + 40;
-        }
-        return -1;
-    }
-
-    private static String bytesToHex(byte[] data, int offset, int len) {
-        if (data == null || offset < 0 || offset >= data.length) {
-            return "";
-        }
-        int end = Math.min(offset + len, data.length);
-        StringBuilder sb = new StringBuilder();
-        for (int i = offset; i < end; i++) {
-            sb.append(String.format("%02x", data[i] & 0xff));
-        }
-        return sb.toString();
     }
 }

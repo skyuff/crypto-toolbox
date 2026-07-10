@@ -77,7 +77,7 @@
               <el-descriptions :column="2" border>
                 <el-descriptions-item label="协议版本">
                   <div class="version-line">
-                    <span>{{ row.protocolVersion || '-' }}</span>
+                    <span>{{ fallbackText(row.protocolVersion) }}</span>
                     <el-tag v-if="row.gm" size="small" type="danger">国密</el-tag>
                   </div>
                 </el-descriptions-item>
@@ -138,14 +138,14 @@
                         <el-button type="primary" size="small" @click="exportCert(cert, idx)">导出证书</el-button>
                       </div>
                       <div class="cert-header">
-                        <el-tag size="small">{{ cert.version || cert['版本号'] || cert['版本'] || '-' }}</el-tag>
+                        <el-tag size="small">{{ certVersionText(cert) }}</el-tag>
                         <el-tag v-if="cert.expired || cert['已过期']" size="small" type="danger">证书不在有效期内</el-tag>
                         <el-tag v-else size="small" type="success">证书在有效期内</el-tag>
                       </div>
                       <div class="cert-body">
                         <div class="cert-row">
                           <span class="cert-label">序列号</span>
-                          <span class="cert-val">{{ cert.serialNumber || cert['序列号'] || '-' }}</span>
+                          <span class="cert-val">{{ certSerialText(cert) }}</span>
                         </div>
                         <div class="cert-row">
                           <span class="cert-label">使用者</span>
@@ -208,14 +208,14 @@
                         <el-button type="primary" size="small" @click="exportCert(cert, idx)">导出证书</el-button>
                       </div>
                       <div class="cert-header">
-                        <el-tag size="small">{{ cert.version || cert['版本号'] || cert['版本'] || '-' }}</el-tag>
+                        <el-tag size="small">{{ certVersionText(cert) }}</el-tag>
                         <el-tag v-if="cert.expired || cert['已过期']" size="small" type="danger">证书不在有效期内</el-tag>
                         <el-tag v-else size="small" type="success">证书在有效期内</el-tag>
                       </div>
                       <div class="cert-body">
                         <div class="cert-row">
                           <span class="cert-label">序列号</span>
-                          <span class="cert-val">{{ cert.serialNumber || cert['序列号'] || '-' }}</span>
+                          <span class="cert-val">{{ certSerialText(cert) }}</span>
                         </div>
                         <div class="cert-row">
                           <span class="cert-label">使用者</span>
@@ -280,7 +280,7 @@
 
         <el-table-column label="协议版本" prop="protocolVersion" min-width="260" show-overflow-tooltip>
           <template #default="{ row }">
-            {{ row.protocolVersion || '-' }}
+            {{ fallbackText(row.protocolVersion) }}
           </template>
         </el-table-column>
         <el-table-column label="发起方 IP" prop="srcIp" min-width="140" />
@@ -500,6 +500,25 @@ function formatTime(date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }
 
+/** 空值回退：仅对 null/undefined/空字符串显示 '-'，保留 0/false 等合法值 */
+function fallbackText(v) {
+  return v === undefined || v === null || v === '' ? '-' : String(v)
+}
+
+/** 证书版本显示：将数值 0/1/2 正确映射为 v1/v2/v3，避免 0 被误判为空 */
+function certVersionText(cert) {
+  const v = cert.version ?? cert['版本号'] ?? cert['版本']
+  if (v === undefined || v === null || v === '') return '-'
+  if (typeof v === 'number') return 'v' + (v + 1)
+  return String(v)
+}
+
+/** 证书序列号显示：保留 '0' 等合法值 */
+function certSerialText(cert) {
+  const s = cert.serialNumber ?? cert['序列号']
+  return s === undefined || s === null || s === '' ? '-' : String(s)
+}
+
 function cipherSuiteText(cs) {
   if (!cs) return '-'
   if (typeof cs === 'string') return cs
@@ -538,7 +557,7 @@ function exportCert(cert, idx) {
     return
   }
   try {
-    const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0))
+    const bytes = Uint8Array.from(atob(base64.replace(/\s/g, '')), c => c.charCodeAt(0))
     const blob = new Blob([bytes], { type: 'application/x-x509-ca-cert' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')

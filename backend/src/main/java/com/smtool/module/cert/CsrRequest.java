@@ -28,4 +28,7 @@ public class CsrRequest {
 
     /** 密钥算法：SM2 / RSA */
     private String algorithm = "SM2";
+
+    /** RSA 密钥长度（位）：仅 RSA 有效，默认 2048，支持 3072/4096 */
+    private Integer keySize = 2048;
 }

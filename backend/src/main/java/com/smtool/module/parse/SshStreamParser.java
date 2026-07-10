@@ -98,20 +98,40 @@ public class SshStreamParser {
             int startPos = pos;
             // 需要至少 4 字节包长度
             if (pos + 4 > data.length) {
+                SshMessage err = new SshMessage();
+                err.type = -3;
+                err.typeName = "parse_error";
+                err.error = "剩余字节不足 4 字节，无法读取 SSH 包长度";
+                messages.add(err);
                 break;
             }
             long packetLength = readU32(data, pos);
             if (packetLength < 1 || packetLength > 0x100000) { // 最大 1MB
+                SshMessage err = new SshMessage();
+                err.type = -3;
+                err.typeName = "parse_error";
+                err.error = "SSH 包长度非法或超限（offset=" + startPos + ", packetLength=" + packetLength + "）";
+                messages.add(err);
                 break;
             }
             pos += 4;
             if (pos + packetLength > data.length) {
+                SshMessage err = new SshMessage();
+                err.type = -3;
+                err.typeName = "parse_error";
+                err.error = "SSH 包长度超过剩余字节（packetLength=" + packetLength + ", remaining=" + (data.length - pos) + "）";
+                messages.add(err);
                 break;
             }
             int paddingLength = data[pos] & 0xff;
             pos++;
             int payloadLen = (int) (packetLength - paddingLength - 1);
             if (payloadLen < 0 || payloadLen > packetLength) {
+                SshMessage err = new SshMessage();
+                err.type = -3;
+                err.typeName = "parse_error";
+                err.error = "SSH payload 长度非法（paddingLength=" + paddingLength + ", payloadLen=" + payloadLen + "）";
+                messages.add(err);
                 break;
             }
             byte[] payload = Arrays.copyOfRange(data, pos, pos + payloadLen);
@@ -257,6 +277,7 @@ public class SshStreamParser {
         public String typeName;
         public byte[] payload;
         public String banner;
+        public String error;
     }
 
     public static class KexDhReply {

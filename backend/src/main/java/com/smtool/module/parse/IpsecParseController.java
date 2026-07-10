@@ -32,9 +32,13 @@ public class IpsecParseController {
         return ApiResponse.ok(ipsecParseService.parse(req));
     }
 
-    /** 解析 IPSEC 流量包（pcap / pcapng） */
+    /** 解析 IPSEC 流量包（pcap / pcapng），可选上传 IKE 解密密钥日志或国密证书链补录 */
     @PostMapping("/traffic/parse")
-    public ApiResponse<IpsecTrafficParseResult> parseTraffic(@RequestParam("file") MultipartFile file) throws Exception {
-        return ApiResponse.ok(ipsecTrafficParseService.parse(file));
+    public ApiResponse<IpsecTrafficParseResult> parseTraffic(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "keyLogFile", required = false) MultipartFile keyLogFile,
+            @RequestParam(value = "initiatorCertFiles", required = false) MultipartFile[] initiatorCertFiles,
+            @RequestParam(value = "responderCertFiles", required = false) MultipartFile[] responderCertFiles) throws Exception {
+        return ApiResponse.ok(ipsecTrafficParseService.parse(file, keyLogFile, initiatorCertFiles, responderCertFiles));
     }
 }

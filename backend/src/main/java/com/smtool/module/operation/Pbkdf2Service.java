@@ -27,7 +27,7 @@ public class Pbkdf2Service {
 
     /** 执行 PBKDF2 派生 */
     public Map<String, Object> derive(Pbkdf2Request req) {
-        int iterations = req.getIterations() <= 0 ? 1024 : req.getIterations();
+        int iterations = req.getIterations() <= 0 ? 100000 : req.getIterations();
         int keyLength = req.getKeyLength() <= 0 ? 32 : req.getKeyLength();
         String prf = normalizePrf(req.getPrf());
         String outputFmt = normalizeFormat(req.getOutputFormat(), "hex");

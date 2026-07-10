@@ -595,7 +595,7 @@ function setResult(msg, type) { sg.result = msg; sg.resultType = type }
 function cleanSign() {
   ['msg1','msg2','sig1','sig2','publicKey','privateKey'].forEach(k=>sg[k]=sg[k].replace(/[\s\r\n]/g,''))
 }
-function resetSign() { ['msg1','msg2','sig1','sig2','result'].forEach(k=>sg[k]='') }
+function resetSign() { ['msg1','msg2','sig1','sig2','result'].forEach(k=>sg[k]=''); sg.resultType='success' }
 
 // ---------- 6 加密解密 ----------
 const cr = reactive({
@@ -658,7 +658,9 @@ async function doExchange() {
 function userIdValue(v, fmt) {
   if (fmt === 'hex') {
     try {
-      const bytes = v.replace(/\s/g,'').match(/.{1,2}/g)?.map(b=>parseInt(b,16)) || []
+      let s = v.replace(/\s/g,'')
+      if (s.length % 2 === 1) s = '0' + s
+      const bytes = s.match(/.{1,2}/g)?.map(b=>parseInt(b,16)) || []
       return String.fromCharCode(...bytes)
     } catch { return v }
   }

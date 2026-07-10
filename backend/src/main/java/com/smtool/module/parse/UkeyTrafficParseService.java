@@ -27,12 +27,26 @@ import java.util.Map;
 public class UkeyTrafficParseService {
 
     private final UkeyParseService ukeyParseService;
+    private int maxPackets = 200;
 
     public UkeyTrafficParseService(UkeyParseService ukeyParseService) {
         this.ukeyParseService = ukeyParseService;
     }
 
+    /**
+     * 解析 UKey 流量包（使用默认 APDU 数量上限）。
+     */
     public Map<String, Object> parse(String vendor, MultipartFile file, String keyCertInput, String keyCertMode) throws Exception {
+        return parse(vendor, file, keyCertInput, keyCertMode, 0);
+    }
+
+    /**
+     * 解析 UKey 流量包。
+     *
+     * @param maxPackets 单条流量最多解析的 APDU 个数；<=0 时使用默认 200。
+     */
+    public Map<String, Object> parse(String vendor, MultipartFile file, String keyCertInput, String keyCertMode, int maxPackets) throws Exception {
+        int limit = maxPackets > 0 ? maxPackets : this.maxPackets;
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("vendor", vendor == null ? "" : vendor);
 
@@ -53,10 +67,10 @@ public class UkeyTrafficParseService {
 
         if (trafficBytes != null && trafficBytes.length > 0) {
             if (vendor != null && vendor.contains("0017")) {
-                result.put("apduPackets", parseApduStream(trafficBytes));
+                result.put("apduPackets", parseApduStream(trafficBytes, limit));
             } else {
                 result.put("note", "当前厂商私有协议解析器暂未实现，已按通用 GM/T 0017 APDU 流做参考解析。");
-                result.put("apduPackets", parseApduStream(trafficBytes));
+                result.put("apduPackets", parseApduStream(trafficBytes, limit));
             }
         }
 
@@ -64,11 +78,10 @@ public class UkeyTrafficParseService {
     }
 
     /** 顺序解析字节流中的 command APDU */
-    private List<Map<String, Object>> parseApduStream(byte[] data) {
+    private List<Map<String, Object>> parseApduStream(byte[] data, int limit) {
         List<Map<String, Object>> list = new ArrayList<>();
         int pos = 0;
-        int maxPackets = 200; // 防止异常大文件导致解析过久
-        while (pos < data.length && list.size() < maxPackets) {
+        while (pos < data.length && list.size() < limit) {
             int remaining = data.length - pos;
             if (remaining < 4) {
                 Map<String, Object> leftover = new LinkedHashMap<>();
@@ -83,8 +96,8 @@ public class UkeyTrafficParseService {
             Map<String, Object> parsed = ukeyParseService.parseCommandApdu(apdu);
             int consumed = parsed.get("consumedBytes") instanceof Number n ? n.intValue() : 0;
             if (consumed <= 0) {
-                // 避免死循环
-                consumed = 4;
+                parsed.put("parseError", "consumedBytes 非法（" + consumed + "），按 1 字节跳过以避免死循环");
+                consumed = 1;
             }
             parsed.put("index", list.size() + 1);
             parsed.put("offset", pos);
@@ -95,7 +108,7 @@ public class UkeyTrafficParseService {
         if (pos < data.length) {
             Map<String, Object> endNote = new LinkedHashMap<>();
             endNote.put("index", list.size() + 1);
-            endNote.put("note", "仅解析前 200 个 APDU，后续数据未处理");
+            endNote.put("note", "仅解析前 " + limit + " 个 APDU，后续数据未处理（当前偏移 " + pos + "，总长度 " + data.length + "）");
             list.add(endNote);
         }
         return list;

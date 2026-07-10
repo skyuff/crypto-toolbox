@@ -158,10 +158,8 @@ public class Asn1ParseService {
         }
         try (ASN1InputStream ais = new ASN1InputStream(new ByteArrayInputStream(data))) {
             ASN1Primitive inner = ais.readObject();
-            // 要求恰好消费完全部字节，且是结构化类型，才认为是有效内嵌 DER
-            if (inner != null && ais.readObject() == null
-                    && (inner instanceof ASN1Sequence || inner instanceof ASN1Set
-                    || inner instanceof ASN1TaggedObject || inner instanceof ASN1ObjectIdentifier)) {
+            // 要求恰好消费完全部字节，并接受常见 ASN.1 类型作为合法内嵌 DER
+            if (inner != null && ais.readObject() == null) {
                 return buildNode(inner);
             }
         } catch (Exception ignore) {

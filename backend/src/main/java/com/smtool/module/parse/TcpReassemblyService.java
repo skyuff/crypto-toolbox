@@ -84,6 +84,9 @@ public class TcpReassemblyService {
             // 通过比较 key 中的 A 与包的源地址判断方向
             boolean isAToB = key.ipA.equals(pkt.getSrcIp()) && key.portA == pkt.getSrcPort();
             int tcpOffset = findTcpOffset(pkt);
+            if (tcpOffset < 0) {
+                continue;
+            }
             // TCP 头起始位置后 4 字节为 Sequence Number，再后 4 字节为 Ack Number
             long seq = readUnsignedInt(pkt.getRaw(), tcpOffset + 4);
             long ack = readUnsignedInt(pkt.getRaw(), tcpOffset + 8);
@@ -105,31 +108,11 @@ public class TcpReassemblyService {
     }
 
     private static int findTcpOffset(PcapPacket pkt) {
-        byte[] raw = pkt.getRaw();
-        int linkType = pkt.getLinkType();
-        int offset;
-        int etherType;
-        if (linkType == 1) {
-            offset = 14;
-            etherType = ((raw[12] & 0xff) << 8) | (raw[13] & 0xff);
-            while (etherType == 0x8100 || etherType == 0x88a8 || etherType == 0x9100) {
-                etherType = ((raw[offset + 2] & 0xff) << 8) | (raw[offset + 3] & 0xff);
-                offset += 4;
-            }
-        } else if (linkType == 101) {
-            offset = 0;
-            etherType = ((raw[0] & 0xff) << 8) | (raw[1] & 0xff);
-        } else {
+        PacketOffsetUtil.Result result = PacketOffsetUtil.parse(pkt.getRaw(), pkt.getLinkType());
+        if (!result.supported || result.ipProtocol != 6) {
             return -1;
         }
-        if (etherType == 0x0800) {
-            int ihl = raw[offset] & 0x0f;
-            return offset + ihl * 4;
-        } else if (etherType == 0x86dd) {
-            // simplified: assume no extension headers
-            return offset + 40;
-        }
-        return -1;
+        return result.transportOffset;
     }
 
     private static long readUnsignedInt(byte[] data, int offset) {

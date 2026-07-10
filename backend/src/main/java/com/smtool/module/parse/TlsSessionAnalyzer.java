@@ -4,9 +4,12 @@ import com.smtool.util.CodecUtil;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Base64;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 将重组后的双向 TCP 流聚合为 TLS/TLCP 会话。
@@ -38,9 +41,14 @@ public class TlsSessionAnalyzer {
                 + " aToB-head=" + CodecUtil.toHex(dataAtoB.length > 20 ? java.util.Arrays.copyOf(dataAtoB, 20) : dataAtoB)
                 + " bToA-head=" + CodecUtil.toHex(dataBtoA.length > 20 ? java.util.Arrays.copyOf(dataBtoA, 20) : dataBtoA));
 
-        List<TlsStreamParser.HandshakeMessage> msgsAtoB = tlsStreamParser.extractHandshakes(dataAtoB);
-        List<TlsStreamParser.HandshakeMessage> msgsBtoA = tlsStreamParser.extractHandshakes(dataBtoA);
-        System.out.println("[TLS-ANALYZE] stream=" + stream.key + " hsAtoB=" + msgsAtoB.size() + " hsBtoA=" + msgsBtoA.size());
+        TlsStreamParser.StreamFeatures featuresAtoB = tlsStreamParser.extractFeatures(dataAtoB);
+        TlsStreamParser.StreamFeatures featuresBtoA = tlsStreamParser.extractFeatures(dataBtoA);
+        List<TlsStreamParser.HandshakeMessage> msgsAtoB = featuresAtoB.getHandshakes();
+        List<TlsStreamParser.HandshakeMessage> msgsBtoA = featuresBtoA.getHandshakes();
+        System.out.println("[TLS-ANALYZE] stream=" + stream.key
+                + " hsAtoB=" + msgsAtoB.size() + " hsBtoA=" + msgsBtoA.size()
+                + " ccsAtoB=" + featuresAtoB.isSawChangeCipherSpec() + " ccsBtoA=" + featuresBtoA.isSawChangeCipherSpec()
+                + " appAtoB=" + featuresAtoB.isSawApplicationData() + " appBtoA=" + featuresBtoA.isSawApplicationData());
 
         // 确定方向：发送 ClientHello 的是 client
         boolean aIsClient = hasClientHello(msgsAtoB);
@@ -54,9 +62,13 @@ public class TlsSessionAnalyzer {
 
         List<TlsStreamParser.HandshakeMessage> clientMsgs;
         List<TlsStreamParser.HandshakeMessage> serverMsgs;
+        TlsStreamParser.StreamFeatures clientFeatures;
+        TlsStreamParser.StreamFeatures serverFeatures;
         if (aIsClient) {
             clientMsgs = msgsAtoB;
             serverMsgs = msgsBtoA;
+            clientFeatures = featuresAtoB;
+            serverFeatures = featuresBtoA;
             session.setClientIp(stream.key.ipA);
             session.setClientPort(stream.key.portA);
             session.setServerIp(stream.key.ipB);
@@ -64,11 +76,17 @@ public class TlsSessionAnalyzer {
         } else {
             clientMsgs = msgsBtoA;
             serverMsgs = msgsAtoB;
+            clientFeatures = featuresBtoA;
+            serverFeatures = featuresAtoB;
             session.setClientIp(stream.key.ipB);
             session.setClientPort(stream.key.portB);
             session.setServerIp(stream.key.ipA);
             session.setServerPort(stream.key.portA);
         }
+
+        session.setSawClientChangeCipherSpec(clientFeatures.isSawChangeCipherSpec());
+        session.setSawServerChangeCipherSpec(serverFeatures.isSawChangeCipherSpec());
+        session.setSawApplicationData(clientFeatures.isSawApplicationData() || serverFeatures.isSawApplicationData());
 
         // 解析 client -> server 消息
         for (TlsStreamParser.HandshakeMessage msg : clientMsgs) {
@@ -100,6 +118,10 @@ public class TlsSessionAnalyzer {
                 try {
                     ByteReader r = new ByteReader(toHandshakeBytes(msg));
                     Map<String, Object> hs = tlsParseService.parseClientHello(r);
+                    if (Boolean.TRUE.equals(hs.get("truncated"))) {
+                        session.getNotes().add("ClientHello 解析被截断");
+                        break;
+                    }
                     session.setSawClientHello(true);
                     Object ver = hs.get("client_version_value");
                     if (ver instanceof Integer) {
@@ -119,7 +141,7 @@ public class TlsSessionAnalyzer {
                 }
             }
             case 11 -> {
-                List<byte[]> certs = certExtractor.extractCertificates(msg.getPayload());
+                List<byte[]> certs = extractCertsWithFallback(msg.getPayload(), session.getClientHelloVersion());
                 session.getClientCertChainDer().addAll(certs);
                 session.setSawClientCertificate(true);
             }
@@ -135,10 +157,15 @@ public class TlsSessionAnalyzer {
                     ByteReader r = new ByteReader(toHandshakeBytes(msg));
                     Map<String, Object> hs = tlsParseService.parseServerHello(r);
                     session.setSawServerHello(true);
-                    Object ver = hs.get("server_version_value");
-                    if (ver instanceof Integer) {
-                        session.setServerHelloVersion((Integer) ver);
+                    // TLS 1.3 的 ServerHello legacy_version 固定为 0x0303，真实版本在 supported_versions 扩展中
+                    Integer realVersion = extractSupportedVersion(hs);
+                    if (realVersion == null) {
+                        Object ver = hs.get("server_version_value");
+                        if (ver instanceof Integer) {
+                            realVersion = (Integer) ver;
+                        }
                     }
+                    session.setServerHelloVersion(realVersion);
                     session.setServerRandom((String) hs.get("random"));
                     session.setServerSessionId((String) hs.get("sessionId"));
                     session.setServerCompressionMethod((String) hs.get("compressionMethod"));
@@ -158,10 +185,10 @@ public class TlsSessionAnalyzer {
                 }
             }
             case 11 -> {
-                List<byte[]> certs = certExtractor.extractCertificates(msg.getPayload());
+                List<byte[]> certs = extractCertsWithFallback(msg.getPayload(), session.getServerHelloVersion());
                 session.getServerCertChainDer().addAll(certs);
             }
-            case 12 -> session.setServerKeyExchange(parseServerKeyExchange(msg.getPayload(), session.getServerCipherSuite()));
+            case 12 -> session.setServerKeyExchange(parseServerKeyExchange(msg.getPayload(), session.getServerCipherSuite(), session.getServerHelloVersion()));
             case 13 -> session.setSawCertificateRequest(true);
             case 20 -> session.setSawServerFinished(true);
         }
@@ -222,7 +249,10 @@ public class TlsSessionAnalyzer {
                     int nameType = bytes[pos] & 0xff;
                     int nameLen = ((bytes[pos + 1] & 0xff) << 8) | (bytes[pos + 2] & 0xff);
                     pos += 3;
-                    if (nameType == 0 && pos + nameLen <= end) {
+                    if (pos + nameLen > end) {
+                        break;
+                    }
+                    if (nameType == 0) {
                         return new String(bytes, pos, nameLen, java.nio.charset.StandardCharsets.UTF_8);
                     }
                     pos += nameLen;
@@ -233,7 +263,7 @@ public class TlsSessionAnalyzer {
         return null;
     }
 
-    private Map<String, Object> parseServerKeyExchange(byte[] payload, Integer serverCipherSuite) {
+    private Map<String, Object> parseServerKeyExchange(byte[] payload, Integer serverCipherSuite, Integer version) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("rawHex", CodecUtil.toHex(payload));
         if (payload == null || payload.length == 0) {
@@ -242,8 +272,8 @@ public class TlsSessionAnalyzer {
         String algo = inferKeyExchangeAlgorithm(serverCipherSuite);
         result.put("algorithm", algo);
         try {
-            if ("ECDHE".equals(algo) || "SM2".equals(algo) || "ECDH".equals(algo)) {
-                parseEcdheServerKeyExchange(payload, result);
+            if ("ECDHE".equals(algo) || "SM2".equals(algo) || "ECDH".equals(algo) || "SM2/ECDHE".equals(algo)) {
+                parseEcdheServerKeyExchange(payload, result, version);
             } else if ("DHE".equals(algo) || "DH".equals(algo)) {
                 parseDhServerKeyExchange(payload, result);
             } else if ("RSA".equals(algo)) {
@@ -256,59 +286,81 @@ public class TlsSessionAnalyzer {
     }
 
     private String inferKeyExchangeAlgorithm(Integer cipherSuite) {
-        if (cipherSuite == null) {
-            return "未知";
-        }
-        int cs = cipherSuite;
-        if ((cs & 0xff00) == 0xe000 || cs == 0x00c6 || cs == 0x00c7) {
-            return "SM2";
-        }
-        String name = resolveCipherSuiteName(cs).toLowerCase();
-        if (name.contains("ecdhe")) return "ECDHE";
-        if (name.contains("ecdh")) return "ECDH";
-        if (name.contains("dhe") || name.contains("dh")) return "DHE";
-        if (name.contains("rsa")) return "RSA";
-        return "未知";
+        return cipherSuite == null ? "未知" : TlsCipherSuites.inferKeyExchangeAlgorithm(cipherSuite);
     }
 
-    private String resolveCipherSuiteName(int cs) {
-        switch (cs) {
-            case 0x0000: return "TLS_NULL_WITH_NULL_NULL";
-            case 0x002f: return "TLS_RSA_WITH_AES_128_CBC_SHA";
-            case 0x0035: return "TLS_RSA_WITH_AES_256_CBC_SHA";
-            case 0x009c: return "TLS_RSA_WITH_AES_128_GCM_SHA256";
-            case 0x009d: return "TLS_RSA_WITH_AES_256_GCM_SHA384";
-            case 0xc013: return "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA";
-            case 0xc014: return "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA";
-            case 0xc02b: return "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256";
-            case 0xc02c: return "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384";
-            case 0xc02f: return "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256";
-            case 0xc030: return "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384";
-            case 0xcca8: return "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256";
-            case 0xcca9: return "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256";
-            case 0x1301: return "TLS_AES_128_GCM_SHA256";
-            case 0x1302: return "TLS_AES_256_GCM_SHA384";
-            case 0x1303: return "TLS_CHACHA20_POLY1305_SHA256";
-            case 0x00ff: return "TLS_EMPTY_RENEGOTIATION_INFO_SCSV";
-            default: return "未知套件";
+    /**
+     * 从 ServerHello 的 supported_versions 扩展中提取真实协议版本（TLS 1.3 需要）。
+     */
+    @SuppressWarnings("unchecked")
+    private Integer extractSupportedVersion(Map<String, Object> hs) {
+        List<Map<String, Object>> exts = (List<Map<String, Object>>) hs.get("extensions");
+        if (exts == null) {
+            return null;
         }
+        for (Map<String, Object> ext : exts) {
+            String type = (String) ext.get("type");
+            if (type == null || !type.startsWith("0x002b")) {
+                continue;
+            }
+            Object value = ext.get("selectedVersionValue");
+            if (value instanceof Integer) {
+                return (Integer) value;
+            }
+        }
+        return null;
     }
 
-    private void parseEcdheServerKeyExchange(byte[] payload, Map<String, Object> result) {
+    private void parseEcdheServerKeyExchange(byte[] payload, Map<String, Object> result, Integer version) {
         if (payload.length < 4) return;
         int curveType = payload[0] & 0xff;
         result.put("curveType", curveType == 1 ? "named_curve" : "unknown(" + curveType + ")");
-        if (payload.length >= 3) {
-            int namedCurve = ((payload[1] & 0xff) << 8) | (payload[2] & 0xff);
-            result.put("namedCurve", "0x" + String.format("%04x", namedCurve));
-        }
-        if (payload.length >= 4) {
-            int pubLen = payload[3] & 0xff;
-            if (4 + pubLen <= payload.length) {
-                byte[] pub = new byte[pubLen];
-                System.arraycopy(payload, 4, pub, 0, pubLen);
-                result.put("publicKeyHex", CodecUtil.toHex(pub));
+
+        // named_curve：curve_type(1) + named_curve(2) + pubkey_len(1) + pubkey
+        if (curveType == 1) {
+            if (payload.length >= 3) {
+                int namedCurve = ((payload[1] & 0xff) << 8) | (payload[2] & 0xff);
+                result.put("namedCurve", "0x" + String.format("%04x", namedCurve));
             }
+            if (payload.length >= 4) {
+                int pubLen = payload[3] & 0xff;
+                int pos = 4;
+                if (pos + pubLen <= payload.length) {
+                    byte[] pub = new byte[pubLen];
+                    System.arraycopy(payload, pos, pub, 0, pubLen);
+                    result.put("publicKeyHex", CodecUtil.toHex(pub));
+                    pos += pubLen;
+                }
+                // TLS 1.2 / TLCP 才包含 SignatureAndHashAlgorithm；TLS 1.0/1.1 没有该字段
+                boolean hasSigAlgo = version == null || version >= 0x0303 || version == 0x0101;
+                if (hasSigAlgo) {
+                    if (pos + 4 <= payload.length) {
+                        int sigAlgo = ((payload[pos] & 0xff) << 8) | (payload[pos + 1] & 0xff);
+                        result.put("signatureAlgorithm", "0x" + String.format("%04x", sigAlgo));
+                        pos += 2;
+                        int sigLen = ((payload[pos] & 0xff) << 8) | (payload[pos + 1] & 0xff);
+                        pos += 2;
+                        if (pos + sigLen <= payload.length) {
+                            byte[] sig = new byte[sigLen];
+                            System.arraycopy(payload, pos, sig, 0, sigLen);
+                            result.put("signatureHex", CodecUtil.toHex(sig));
+                        }
+                    }
+                } else {
+                    if (pos + 2 <= payload.length) {
+                        int sigLen = ((payload[pos] & 0xff) << 8) | (payload[pos + 1] & 0xff);
+                        pos += 2;
+                        if (pos + sigLen <= payload.length) {
+                            byte[] sig = new byte[sigLen];
+                            System.arraycopy(payload, pos, sig, 0, sigLen);
+                            result.put("signatureHex", CodecUtil.toHex(sig));
+                        }
+                    }
+                }
+            }
+        } else {
+            // explicit_prime / explicit_char2 需要解析曲线参数，暂记录原始值
+            result.put("parseNote", "显式曲线（curveType=" + curveType + "）参数解析未实现");
         }
     }
 
@@ -334,5 +386,41 @@ public class TlsSessionAnalyzer {
         System.arraycopy(payload, pos, value, 0, len);
         result.put(key + "Hex", CodecUtil.toHex(value));
         return pos + len;
+    }
+
+    /**
+     * 按已识别版本提取证书链；版本未知时同时尝试 TLS 1.2 与 TLS 1.3 并合并去重结果。
+     */
+    private List<byte[]> extractCertsWithFallback(byte[] payload, Integer version) {
+        try {
+            if (version != null) {
+                return certExtractor.extractCertificates(payload, version == 0x0304);
+            }
+            List<byte[]> v12 = certExtractor.extractCertificates(payload, false);
+            List<byte[]> v13 = certExtractor.extractCertificates(payload, true);
+            if (v12.isEmpty()) {
+                return v13;
+            }
+            if (v13.isEmpty()) {
+                return v12;
+            }
+            Set<String> seen = new HashSet<>();
+            List<byte[]> merged = new ArrayList<>();
+            for (byte[] cert : v12) {
+                String key = Base64.getEncoder().encodeToString(cert);
+                if (seen.add(key)) {
+                    merged.add(cert);
+                }
+            }
+            for (byte[] cert : v13) {
+                String key = Base64.getEncoder().encodeToString(cert);
+                if (seen.add(key)) {
+                    merged.add(cert);
+                }
+            }
+            return merged;
+        } catch (Exception e) {
+            return new ArrayList<>();
+        }
     }
 }

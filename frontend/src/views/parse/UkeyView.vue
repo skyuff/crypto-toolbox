@@ -181,6 +181,15 @@ function hexToArrayBuffer(hex) {
   return bytes.buffer
 }
 
+/** 从 axios 错误中提取后端返回的友好提示 */
+function extractError(e) {
+  if (!e) return '请求失败'
+  const msg = e.response?.data?.message
+  if (msg) return msg
+  if (e.response?.data) return String(e.response.data)
+  return e.message || '请求失败'
+}
+
 function handleFileChange(file) {
   currentFile.value = file.raw
   const reader = new FileReader()
@@ -219,6 +228,8 @@ async function run() {
     rawResult.value = await api.post('/ukey/traffic/parse', data, {
       headers: { 'Content-Type': 'multipart/form-data' }
     })
+  } catch (e) {
+    ElMessage.error('解析失败：' + extractError(e))
   } finally {
     loading.value = false
   }

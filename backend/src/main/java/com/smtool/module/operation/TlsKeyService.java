@@ -16,8 +16,6 @@ import java.util.Map;
 @Service
 public class TlsKeyService {
 
-    /** 分组套件默认 KeyBlock 长度：MAC*2 + ENC*2 + IV*2 = 20+20+16+16+16+16 = 104（SHA256/SM3 场景） */
-    private static final int BLOCK_KEY_BLOCK_LENGTH = 104;
     /** AEAD（GCM）套件默认 KeyBlock 长度：KEY*2 + IV*2 = 16+16+4+4 = 40 */
     private static final int AEAD_KEY_BLOCK_LENGTH = 40;
 
@@ -83,14 +81,41 @@ public class TlsKeyService {
         return s;
     }
 
-    /** 确定 KeyBlock 长度 */
+    /** 确定 KeyBlock 长度：用户显式指定优先；否则按 hash 与 suiteType 动态计算。 */
     private int resolveKeyBlockLength(TlsKeyRequest req) {
         if (req.getKeyBlockLength() > 0) {
             return req.getKeyBlockLength();
         }
-        return "aead".equalsIgnoreCase(req.getSuiteType())
-                ? AEAD_KEY_BLOCK_LENGTH
-                : BLOCK_KEY_BLOCK_LENGTH;
+        String suiteType = req.getSuiteType();
+        if (suiteType != null && "aead".equalsIgnoreCase(suiteType.trim())) {
+            return AEAD_KEY_BLOCK_LENGTH;
+        }
+        int macLen = PrfService.newDigest(req.getHash()).getDigestSize();
+        int[] keyIv = cipherKeyIvSizes(suiteType);
+        return 2 * (macLen + keyIv[0] + keyIv[1]);
+    }
+
+    /** 根据 suiteType 推断对称密钥长度与 IV 长度（字节）。 */
+    private int[] cipherKeyIvSizes(String suiteType) {
+        String s = suiteType == null ? "" : suiteType.trim().toLowerCase();
+        if (s.contains("sm4")) {
+            return new int[]{16, 16};
+        }
+        if (s.contains("aes")) {
+            int keyLen;
+            if (s.contains("128")) {
+                keyLen = 16;
+            } else if (s.contains("192")) {
+                keyLen = 24;
+            } else if (s.contains("256")) {
+                keyLen = 32;
+            } else {
+                keyLen = 16; // 默认 AES-128
+            }
+            return new int[]{keyLen, 16};
+        }
+        // 默认按 SM4-CBC 处理
+        return new int[]{16, 16};
     }
 
     /** 按指定格式编码输出 */

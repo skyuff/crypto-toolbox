@@ -35,13 +35,26 @@ public class IpsecSession {
     private List<String> responderProposalsDhGroup = new ArrayList<>();
 
     private String selectedEncryption;
+    private Integer selectedEncryptionKeyLength;
     private String selectedIntegrity;
     private String selectedPrf;
     private String selectedDhGroup;
+    private String selectedAuthMethod;
+    private Long keyLifetimeSeconds;
 
     private String initiatorIdentity;
     private String responderIdentity;
     private String authMethod;
+
+    private List<IpsecCertificateInfo> initiatorCertificates = new ArrayList<>();
+    private List<IpsecCertificateInfo> responderCertificates = new ArrayList<>();
+
+    private String initiatorNonce;
+    private String responderNonce;
+    private String initiatorKeData;
+    private String responderKeData;
+    private String initiatorSignature;
+    private String responderSignature;
 
     private List<String> certificateDerBase64 = new ArrayList<>();
     private List<String> vendorIds = new ArrayList<>();
@@ -50,6 +63,11 @@ public class IpsecSession {
 
     private boolean gm;
     private List<String> notes = new ArrayList<>();
+
+    /** 是否存在 ESP/AH 数据面流量 */
+    private boolean hasDataPlane;
+    /** ESP/AH 数据面 SA 列表 */
+    private List<IpsecDataPlaneSa> dataPlaneSas = new ArrayList<>();
 
     /** 每条 ISAKMP 消息的解析结果，包含 direction 字段 */
     private List<Map<String, Object>> messages = new ArrayList<>();
@@ -104,6 +122,12 @@ public class IpsecSession {
     public void setSelectedPrf(String selectedPrf) { this.selectedPrf = selectedPrf; }
     public String getSelectedDhGroup() { return selectedDhGroup; }
     public void setSelectedDhGroup(String selectedDhGroup) { this.selectedDhGroup = selectedDhGroup; }
+    public Integer getSelectedEncryptionKeyLength() { return selectedEncryptionKeyLength; }
+    public void setSelectedEncryptionKeyLength(Integer selectedEncryptionKeyLength) { this.selectedEncryptionKeyLength = selectedEncryptionKeyLength; }
+    public String getSelectedAuthMethod() { return selectedAuthMethod; }
+    public void setSelectedAuthMethod(String selectedAuthMethod) { this.selectedAuthMethod = selectedAuthMethod; }
+    public Long getKeyLifetimeSeconds() { return keyLifetimeSeconds; }
+    public void setKeyLifetimeSeconds(Long keyLifetimeSeconds) { this.keyLifetimeSeconds = keyLifetimeSeconds; }
 
     public String getInitiatorIdentity() { return initiatorIdentity; }
     public void setInitiatorIdentity(String initiatorIdentity) { this.initiatorIdentity = initiatorIdentity; }
@@ -111,6 +135,24 @@ public class IpsecSession {
     public void setResponderIdentity(String responderIdentity) { this.responderIdentity = responderIdentity; }
     public String getAuthMethod() { return authMethod; }
     public void setAuthMethod(String authMethod) { this.authMethod = authMethod; }
+
+    public List<IpsecCertificateInfo> getInitiatorCertificates() { return initiatorCertificates; }
+    public void setInitiatorCertificates(List<IpsecCertificateInfo> initiatorCertificates) { this.initiatorCertificates = initiatorCertificates; }
+    public List<IpsecCertificateInfo> getResponderCertificates() { return responderCertificates; }
+    public void setResponderCertificates(List<IpsecCertificateInfo> responderCertificates) { this.responderCertificates = responderCertificates; }
+
+    public String getInitiatorNonce() { return initiatorNonce; }
+    public void setInitiatorNonce(String initiatorNonce) { this.initiatorNonce = initiatorNonce; }
+    public String getResponderNonce() { return responderNonce; }
+    public void setResponderNonce(String responderNonce) { this.responderNonce = responderNonce; }
+    public String getInitiatorKeData() { return initiatorKeData; }
+    public void setInitiatorKeData(String initiatorKeData) { this.initiatorKeData = initiatorKeData; }
+    public String getResponderKeData() { return responderKeData; }
+    public void setResponderKeData(String responderKeData) { this.responderKeData = responderKeData; }
+    public String getInitiatorSignature() { return initiatorSignature; }
+    public void setInitiatorSignature(String initiatorSignature) { this.initiatorSignature = initiatorSignature; }
+    public String getResponderSignature() { return responderSignature; }
+    public void setResponderSignature(String responderSignature) { this.responderSignature = responderSignature; }
 
     public List<String> getCertificateDerBase64() { return certificateDerBase64; }
     public List<String> getVendorIds() { return vendorIds; }
@@ -123,6 +165,12 @@ public class IpsecSession {
 
     public List<Map<String, Object>> getMessages() { return messages; }
     public void setMessages(List<Map<String, Object>> messages) { this.messages = messages; }
+
+    public boolean isHasDataPlane() { return hasDataPlane; }
+    public void setHasDataPlane(boolean hasDataPlane) { this.hasDataPlane = hasDataPlane; }
+
+    public List<IpsecDataPlaneSa> getDataPlaneSas() { return dataPlaneSas; }
+    public void setDataPlaneSas(List<IpsecDataPlaneSa> dataPlaneSas) { this.dataPlaneSas = dataPlaneSas; }
 
     /**
      * 聚合发起方算法提案（用于前端展示）。

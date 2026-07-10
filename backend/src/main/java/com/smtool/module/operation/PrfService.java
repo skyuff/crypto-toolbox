@@ -32,12 +32,16 @@ public class PrfService {
 
         Digest digest = newDigest(req.getHash());
         int hashLen = digest.getDigestSize();
-        int length = req.getIterations() > 0
-                ? req.getIterations() * hashLen
-                : req.getOutputLength();
-        if (length <= 0) {
+        long lengthLong = req.getIterations() > 0
+                ? (long) req.getIterations() * (long) hashLen
+                : (long) req.getOutputLength();
+        if (lengthLong <= 0) {
             throw new IllegalArgumentException("迭代轮数或输出长度必须大于 0");
         }
+        if (lengthLong > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("PRF 输出长度超过最大值 " + Integer.MAX_VALUE);
+        }
+        int length = (int) lengthLong;
 
         byte[] output = pHash(digest, secret, labelSeed, length);
 

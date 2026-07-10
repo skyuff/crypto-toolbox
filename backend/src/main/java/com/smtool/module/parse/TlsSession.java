@@ -40,6 +40,11 @@ public class TlsSession {
     private boolean sawServerFinished;
     private boolean sawClientFinished;
 
+    // 握手完成启发式判断（Finished 在 TLS/TLCP 1.2 中已加密，需依赖 CCS + Application Data 推断）
+    private boolean sawClientChangeCipherSpec;
+    private boolean sawServerChangeCipherSpec;
+    private boolean sawApplicationData;
+
     private List<String> notes = new ArrayList<>();
 
     public String getSessionKey() {
@@ -248,6 +253,30 @@ public class TlsSession {
 
     public void setSawClientFinished(boolean sawClientFinished) {
         this.sawClientFinished = sawClientFinished;
+    }
+
+    public boolean isSawClientChangeCipherSpec() {
+        return sawClientChangeCipherSpec;
+    }
+
+    public void setSawClientChangeCipherSpec(boolean sawClientChangeCipherSpec) {
+        this.sawClientChangeCipherSpec = sawClientChangeCipherSpec;
+    }
+
+    public boolean isSawServerChangeCipherSpec() {
+        return sawServerChangeCipherSpec;
+    }
+
+    public void setSawServerChangeCipherSpec(boolean sawServerChangeCipherSpec) {
+        this.sawServerChangeCipherSpec = sawServerChangeCipherSpec;
+    }
+
+    public boolean isSawApplicationData() {
+        return sawApplicationData;
+    }
+
+    public void setSawApplicationData(boolean sawApplicationData) {
+        this.sawApplicationData = sawApplicationData;
     }
 
     public List<String> getNotes() {

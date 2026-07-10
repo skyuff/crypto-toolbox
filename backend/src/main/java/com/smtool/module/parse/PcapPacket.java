@@ -17,12 +17,27 @@ public class PcapPacket {
     private int srcPort = -1;
     /** 目的端口，非 TCP/UDP 时为 -1 */
     private int dstPort = -1;
-    /** 传输层协议：tcp / udp / other */
+    /** 传输层协议：tcp / udp / esp / ah / icmp / other */
     private String protocol = "other";
+    /** IP 协议号：6/17/50/51/1/58 等，-1 表示未知 */
+    private int networkProtocol = -1;
+    /** 网络层（IP 头）起始偏移 */
+    private int networkOffset = -1;
+    /** 传输层/载荷协议头起始偏移 */
+    private int transportOffset = -1;
     /** 传输层 payload */
     private byte[] payload;
     /** 原始链路层数据 */
     private byte[] raw;
+
+    /** ESP SPI（网络字节序转无符号 long），非 ESP 包为 -1 */
+    private long espSpi = -1;
+    /** ESP Sequence Number（网络字节序转无符号 long），非 ESP 包为 -1 */
+    private long espSequence = -1;
+    /** AH SPI（网络字节序转无符号 long），非 AH 包为 -1 */
+    private long ahSpi = -1;
+    /** AH Sequence Number（网络字节序转无符号 long），非 AH 包为 -1 */
+    private long ahSequence = -1;
 
     public long getTimestampMicros() {
         return timestampMicros;
@@ -94,5 +109,61 @@ public class PcapPacket {
 
     public void setRaw(byte[] raw) {
         this.raw = raw;
+    }
+
+    public int getNetworkProtocol() {
+        return networkProtocol;
+    }
+
+    public void setNetworkProtocol(int networkProtocol) {
+        this.networkProtocol = networkProtocol;
+    }
+
+    public int getNetworkOffset() {
+        return networkOffset;
+    }
+
+    public void setNetworkOffset(int networkOffset) {
+        this.networkOffset = networkOffset;
+    }
+
+    public int getTransportOffset() {
+        return transportOffset;
+    }
+
+    public void setTransportOffset(int transportOffset) {
+        this.transportOffset = transportOffset;
+    }
+
+    public long getEspSpi() {
+        return espSpi;
+    }
+
+    public void setEspSpi(long espSpi) {
+        this.espSpi = espSpi;
+    }
+
+    public long getEspSequence() {
+        return espSequence;
+    }
+
+    public void setEspSequence(long espSequence) {
+        this.espSequence = espSequence;
+    }
+
+    public long getAhSpi() {
+        return ahSpi;
+    }
+
+    public void setAhSpi(long ahSpi) {
+        this.ahSpi = ahSpi;
+    }
+
+    public long getAhSequence() {
+        return ahSequence;
+    }
+
+    public void setAhSequence(long ahSequence) {
+        this.ahSequence = ahSequence;
     }
 }

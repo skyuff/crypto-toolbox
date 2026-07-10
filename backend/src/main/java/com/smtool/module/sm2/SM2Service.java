@@ -13,6 +13,7 @@ import org.bouncycastle.math.ec.ECPoint;
 import org.springframework.stereotype.Service;
 
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.HashMap;
 import java.util.Map;
@@ -59,7 +60,7 @@ public class SM2Service {
 
     /** 由私钥 d 计算公钥 P = [d]G。 */
     public Map<String, Object> computePublicKey(SM2Request req) {
-        BigInteger d = new BigInteger(cleanHex(req.getPrivateKey()), 16);
+        BigInteger d = parsePrivateScalar(req.getPrivateKey(), "私钥");
         ECPoint q = DOMAIN.getG().multiply(d).normalize();
         Map<String, Object> result = new HashMap<>();
         result.put("publicKey", "04" + pointXY(q));
@@ -92,6 +93,8 @@ public class SM2Service {
      * 返回 Z 值与 e 值（十六进制）。
      */
     public Map<String, Object> computeE(SM2Request req) {
+        requireNonBlank(req.getPublicKey(), "公钥");
+        requireNonBlank(req.getInput(), "输入消息");
         ECPoint pub = parsePublicKey(req.getPublicKey()).getQ();
         byte[] id = userId(req.getUserId());
         byte[] z = za(id, pub);
@@ -224,6 +227,12 @@ public class SM2Service {
     private byte[] rawToDer(byte[] raw, SM2Engine.Mode mode) throws Exception {
         int c1Len = 65;      // 04 + 32 + 32
         int c3Len = 32;      // SM3
+        if (raw == null || raw.length < c1Len + c3Len + 1) {
+            throw new IllegalArgumentException("裸密文长度不足：C1(65) + C3(32) + C2 至少 1 字节");
+        }
+        if (raw[0] != 0x04) {
+            throw new IllegalArgumentException("裸密文 C1 应以 0x04 未压缩点开头");
+        }
         byte[] c1 = java.util.Arrays.copyOfRange(raw, 0, c1Len);
         byte[] c3, c2;
         if (mode == SM2Engine.Mode.C1C2C3) {
@@ -249,6 +258,9 @@ public class SM2Service {
     private byte[] derToRaw(byte[] der, SM2Engine.Mode mode) throws Exception {
         org.bouncycastle.asn1.ASN1Sequence seq =
                 org.bouncycastle.asn1.ASN1Sequence.getInstance(der);
+        if (seq.size() != 4) {
+            throw new IllegalArgumentException("DER 密文应包含 4 个元素（x, y, C3, C2），实际 " + seq.size());
+        }
         BigInteger x = org.bouncycastle.asn1.ASN1Integer.getInstance(seq.getObjectAt(0)).getValue();
         BigInteger y = org.bouncycastle.asn1.ASN1Integer.getInstance(seq.getObjectAt(1)).getValue();
         byte[] c3 = org.bouncycastle.asn1.ASN1OctetString.getInstance(seq.getObjectAt(2)).getOctets();
@@ -258,12 +270,13 @@ public class SM2Service {
         return mode == SM2Engine.Mode.C1C2C3 ? concat(c1, c2, c3) : concat(c1, c3, c2);
     }
     public Map<String, Object> sign(SM2Request req) throws Exception {
-        BigInteger dVal = new BigInteger(cleanHex(req.getPrivateKey()), 16);
+        BigInteger dVal = parsePrivateScalar(req.getPrivateKey(), "签名私钥");
         BigInteger n = DOMAIN.getN();
         byte[] id = userId(req.getUserId());
 
         BigInteger[] rs;
         if ("evalue".equalsIgnoreCase(req.getSignMode())) {
+            requireNonBlank(req.getEValue(), "e 值");
             BigInteger e = new BigInteger(cleanHex(req.getEValue()), 16).mod(n);
             rs = signWithE(dVal, e, n);
         } else {
@@ -287,12 +300,15 @@ public class SM2Service {
 
     /** SM2 验签。signMode=message/evalue；签名输入 rs(64B) 或 der 自动识别。 */
     public Map<String, Object> verify(SM2Request req) throws Exception {
+        requireNonBlank(req.getPublicKey(), "公钥");
+        requireNonBlank(req.getSignature(), "签名值");
         ECPublicKeyParameters pub = parsePublicKey(req.getPublicKey());
         BigInteger n = DOMAIN.getN();
         BigInteger[] rs = parseSignature(CodecUtil.decode(req.getSignature(), req.getSignatureFormat()));
 
         boolean ok;
         if ("evalue".equalsIgnoreCase(req.getSignMode())) {
+            requireNonBlank(req.getEValue(), "e 值");
             BigInteger e = new BigInteger(cleanHex(req.getEValue()), 16).mod(n);
             ok = verifyWithE(pub.getQ(), e, rs[0], rs[1], n);
         } else {
@@ -636,21 +652,45 @@ public class SM2Service {
 
     private byte[] userId(String userId) {
         String id = (userId == null || userId.isBlank()) ? "1234567812345678" : userId;
-        return id.getBytes();
+        return id.getBytes(StandardCharsets.UTF_8);
     }
 
     private ECPrivateKeyParameters parsePrivateKey(String hex) {
-        BigInteger d = new BigInteger(cleanHex(hex), 16);
+        BigInteger d = parsePrivateScalar(hex, "私钥");
         return new ECPrivateKeyParameters(d, DOMAIN);
     }
 
     private ECPublicKeyParameters parsePublicKey(String hex) {
+        requireNonBlank(hex, "公钥");
         String h = cleanHex(hex);
         if (h.length() == 128) {
             h = "04" + h;
         }
         ECPoint q = CURVE.getCurve().decodePoint(CodecUtil.fromHex(h));
         return new ECPublicKeyParameters(q, DOMAIN);
+    }
+
+    /** 解析并校验私钥标量 d 必须在 [1, n-1] 范围内。 */
+    private BigInteger parsePrivateScalar(String hex, String fieldName) {
+        requireNonBlank(hex, fieldName);
+        String h = cleanHex(hex);
+        BigInteger d;
+        try {
+            d = new BigInteger(h, 16);
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException(fieldName + " 不是有效的十六进制数值");
+        }
+        BigInteger n = DOMAIN.getN();
+        if (d.signum() <= 0 || d.compareTo(n) >= 0) {
+            throw new IllegalArgumentException(fieldName + " 必须在 [1, n-1] 范围内");
+        }
+        return d;
+    }
+
+    private void requireNonBlank(String value, String fieldName) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(fieldName + " 不能为空");
+        }
     }
 
     private String pointXY(ECPoint q) {

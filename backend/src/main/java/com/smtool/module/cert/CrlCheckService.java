@@ -1,5 +1,7 @@
 package com.smtool.module.cert;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.security.cert.CertificateFactory;
@@ -21,8 +23,8 @@ import java.util.Set;
 @Service
 public class CrlCheckService {
 
-    /** 最多返回的吊销条目数量 */
-    private static final int MAX_ENTRIES = 50;
+    private static final Logger log = LoggerFactory.getLogger(CrlCheckService.class);
+
 
     /**
      * 提取 CRL 结构化信息。
@@ -59,6 +61,7 @@ public class CrlCheckService {
                 signatureValid = true;
             } catch (Exception e) {
                 signatureError = "CRL 签名验证失败: " + e.getMessage();
+                log.warn("CRL 签名验证失败", e);
             }
         }
 
@@ -112,14 +115,12 @@ public class CrlCheckService {
         Set<? extends X509CRLEntry> entries = crl.getRevokedCertificates();
         int revokedCount = entries == null ? 0 : entries.size();
         result.put("revokedCount", revokedCount);
+        result.put("revokedTotal", revokedCount);
+        result.put("revokedTruncated", false);
 
         List<Map<String, Object>> revokedList = new ArrayList<>();
         if (entries != null) {
-            int i = 0;
             for (X509CRLEntry entry : entries) {
-                if (i++ >= MAX_ENTRIES) {
-                    break;
-                }
                 Map<String, Object> item = new LinkedHashMap<>();
                 item.put("serialNumber", entry.getSerialNumber().toString(16));
                 item.put("revocationDate", entry.getRevocationDate().toInstant().toString());

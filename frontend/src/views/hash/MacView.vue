@@ -70,7 +70,7 @@
     </div>
     <div class="row">
       <el-input v-model="key" placeholder="密钥">
-        <template #suffix>{{ byteLen(key, keyFormat) }}</template>
+        <template #suffix>{{ keyCharLen() }}</template>
       </el-input>
       <el-button style="margin-left: 8px" @click="genKey">生成密钥</el-button>
     </div>
@@ -123,6 +123,11 @@ function byteLen(str, fmt) {
     }
     return new TextEncoder().encode(str).length
   } catch { return 0 }
+}
+
+function keyCharLen() {
+  if (!key.value) return 0
+  return key.value.replace(/[\s\r\n]/g, '').length
 }
 
 function copy(text) {

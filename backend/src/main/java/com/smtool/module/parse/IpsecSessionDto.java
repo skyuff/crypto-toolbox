@@ -25,13 +25,26 @@ public class IpsecSessionDto {
     private List<String> messageIds = new ArrayList<>();
 
     private String selectedEncryption;
+    private Integer selectedEncryptionKeyLength;
     private String selectedIntegrity;
     private String selectedPrf;
     private String selectedDhGroup;
+    private String selectedAuthMethod;
+    private Long keyLifetimeSeconds;
 
     private String initiatorIdentity;
     private String responderIdentity;
     private String authMethod;
+
+    private List<IpsecCertificateInfoDto> initiatorCertificates = new ArrayList<>();
+    private List<IpsecCertificateInfoDto> responderCertificates = new ArrayList<>();
+
+    private String initiatorNonce;
+    private String responderNonce;
+    private String initiatorKeData;
+    private String responderKeData;
+    private String initiatorSignature;
+    private String responderSignature;
 
     private int certificateCount;
     private List<String> vendorIds = new ArrayList<>();
@@ -40,6 +53,9 @@ public class IpsecSessionDto {
 
     private Map<String, List<String>> initiatorAlgorithms;
     private Map<String, List<String>> responderAlgorithms;
+
+    private boolean hasDataPlane;
+    private List<IpsecDataPlaneSaDto> dataPlaneSas = new ArrayList<>();
 
     private List<String> notes = new ArrayList<>();
     private List<Map<String, Object>> messages = new ArrayList<>();
@@ -79,6 +95,12 @@ public class IpsecSessionDto {
     public void setSelectedPrf(String selectedPrf) { this.selectedPrf = selectedPrf; }
     public String getSelectedDhGroup() { return selectedDhGroup; }
     public void setSelectedDhGroup(String selectedDhGroup) { this.selectedDhGroup = selectedDhGroup; }
+    public Integer getSelectedEncryptionKeyLength() { return selectedEncryptionKeyLength; }
+    public void setSelectedEncryptionKeyLength(Integer selectedEncryptionKeyLength) { this.selectedEncryptionKeyLength = selectedEncryptionKeyLength; }
+    public String getSelectedAuthMethod() { return selectedAuthMethod; }
+    public void setSelectedAuthMethod(String selectedAuthMethod) { this.selectedAuthMethod = selectedAuthMethod; }
+    public Long getKeyLifetimeSeconds() { return keyLifetimeSeconds; }
+    public void setKeyLifetimeSeconds(Long keyLifetimeSeconds) { this.keyLifetimeSeconds = keyLifetimeSeconds; }
 
     public String getInitiatorIdentity() { return initiatorIdentity; }
     public void setInitiatorIdentity(String initiatorIdentity) { this.initiatorIdentity = initiatorIdentity; }
@@ -86,6 +108,24 @@ public class IpsecSessionDto {
     public void setResponderIdentity(String responderIdentity) { this.responderIdentity = responderIdentity; }
     public String getAuthMethod() { return authMethod; }
     public void setAuthMethod(String authMethod) { this.authMethod = authMethod; }
+
+    public List<IpsecCertificateInfoDto> getInitiatorCertificates() { return initiatorCertificates; }
+    public void setInitiatorCertificates(List<IpsecCertificateInfoDto> initiatorCertificates) { this.initiatorCertificates = initiatorCertificates; }
+    public List<IpsecCertificateInfoDto> getResponderCertificates() { return responderCertificates; }
+    public void setResponderCertificates(List<IpsecCertificateInfoDto> responderCertificates) { this.responderCertificates = responderCertificates; }
+
+    public String getInitiatorNonce() { return initiatorNonce; }
+    public void setInitiatorNonce(String initiatorNonce) { this.initiatorNonce = initiatorNonce; }
+    public String getResponderNonce() { return responderNonce; }
+    public void setResponderNonce(String responderNonce) { this.responderNonce = responderNonce; }
+    public String getInitiatorKeData() { return initiatorKeData; }
+    public void setInitiatorKeData(String initiatorKeData) { this.initiatorKeData = initiatorKeData; }
+    public String getResponderKeData() { return responderKeData; }
+    public void setResponderKeData(String responderKeData) { this.responderKeData = responderKeData; }
+    public String getInitiatorSignature() { return initiatorSignature; }
+    public void setInitiatorSignature(String initiatorSignature) { this.initiatorSignature = initiatorSignature; }
+    public String getResponderSignature() { return responderSignature; }
+    public void setResponderSignature(String responderSignature) { this.responderSignature = responderSignature; }
 
     public int getCertificateCount() { return certificateCount; }
     public void setCertificateCount(int certificateCount) { this.certificateCount = certificateCount; }
@@ -100,6 +140,12 @@ public class IpsecSessionDto {
     public void setInitiatorAlgorithms(Map<String, List<String>> initiatorAlgorithms) { this.initiatorAlgorithms = initiatorAlgorithms; }
     public Map<String, List<String>> getResponderAlgorithms() { return responderAlgorithms; }
     public void setResponderAlgorithms(Map<String, List<String>> responderAlgorithms) { this.responderAlgorithms = responderAlgorithms; }
+
+    public boolean isHasDataPlane() { return hasDataPlane; }
+    public void setHasDataPlane(boolean hasDataPlane) { this.hasDataPlane = hasDataPlane; }
+
+    public List<IpsecDataPlaneSaDto> getDataPlaneSas() { return dataPlaneSas; }
+    public void setDataPlaneSas(List<IpsecDataPlaneSaDto> dataPlaneSas) { this.dataPlaneSas = dataPlaneSas; }
 
     public List<String> getNotes() { return notes; }
     public void setNotes(List<String> notes) { this.notes = notes; }

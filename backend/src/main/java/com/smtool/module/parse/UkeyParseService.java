@@ -115,6 +115,9 @@ public class UkeyParseService {
             // 有 Lc：先读 Lc，再读 Data，可能还有 Le
             int lc = r.u8();
             m.put("Lc", String.format("0x%02x", lc) + " (" + lc + " 字节)");
+            if (lc > r.remaining()) {
+                m.put("note", "Lc（" + lc + "）超过剩余字节数（" + r.remaining() + "），APDU 被截断");
+            }
             byte[] body = r.bytes(lc);
             m.put("Data", CodecUtil.toHex(body));
             if (r.has(1)) {

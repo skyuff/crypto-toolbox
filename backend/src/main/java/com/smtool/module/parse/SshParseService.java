@@ -120,21 +120,23 @@ public class SshParseService {
 
         long packetLength = r.u32();
         m.put("packetLength", packetLength);
+        if (packetLength < 1 || packetLength > 0x100000) {
+            m.put("note", "SSH packetLength 非法或超过 1MB 上限（" + packetLength + "）");
+            m.put("truncated", true);
+            return m;
+        }
         int paddingLength = r.u8();
         m.put("paddingLength", paddingLength);
 
         // payload 长度 = packet_length - padding_length - 1
-        int payloadLen = -1;
-        if (packetLength > 0 && paddingLength >= 0) {
-            payloadLen = (int) (packetLength - paddingLength - 1);
+        long payloadLenLong = packetLength - paddingLength - 1;
+        if (payloadLenLong < 0 || payloadLenLong > Integer.MAX_VALUE) {
+            m.put("note", "SSH payload 长度非法（paddingLength=" + paddingLength + ", packetLength=" + packetLength + "）");
+            m.put("truncated", true);
+            return m;
         }
-        byte[] payload;
-        if (payloadLen >= 0) {
-            payload = r.bytes(payloadLen);
-        } else {
-            // 无法确定 payload 长度，取剩余全部
-            payload = r.bytes(r.remaining());
-        }
+        int payloadLen = (int) payloadLenLong;
+        byte[] payload = r.bytes(payloadLen);
         m.put("payloadLength", payload.length);
 
         if (payload.length > 0) {

@@ -41,6 +41,9 @@ public class CertIssueRequest {
     /** 密钥/签名算法：RSA 或 SM2 */
     private String algorithm = "SM2";
 
+    /** RSA 密钥长度（位）：仅 RSA 有效，默认 2048，支持 3072/4096 */
+    private Integer keySize = 2048;
+
     /** 可选：PEM 格式的 PKCS#10 CSR；提供时从中取公钥与主题 */
     private String csr;
 

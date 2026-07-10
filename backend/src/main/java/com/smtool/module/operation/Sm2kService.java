@@ -25,8 +25,10 @@ public class Sm2kService {
     private static final ECCurve EC_CURVE = CURVE.getCurve();
     private static final ECPoint G = CURVE.getG();
 
-    /** C1 点字节长度：04(1) + x(32) + y(32) */
+    /** C1 未压缩点字节长度：04(1) + x(32) + y(32) */
     private static final int C1_LEN = 65;
+    /** C1 压缩点字节长度：02/03(1) + x(32) */
+    private static final int C1_COMPRESSED_LEN = 33;
     /** SM3 摘要长度 */
     private static final int C3_LEN = 32;
 
@@ -35,7 +37,7 @@ public class Sm2kService {
      */
     public Map<String, Object> collide(Sm2kRequest req) throws Exception {
         byte[] inputBytes = decode(req.getInput(), req.getInputFormat());
-        ECPoint c1Point = extractC1(inputBytes);
+        ECPoint c1Point = decodeC1(inputBytes).point;
 
         long kMax = Math.min(req.getKMax(), 10_000_000L);
         if (kMax <= 0) {
@@ -67,11 +69,12 @@ public class Sm2kService {
         }
         ECPoint pub = EC_CURVE.decodePoint(CodecUtil.fromHex(pubHex)).normalize();
 
-        if (inputBytes.length < C1_LEN) {
-            throw new IllegalArgumentException("输入数据过短，无法解析 C1");
+        C1Info c1Info = decodeC1(inputBytes);
+        ECPoint c1Point = c1Info.point;
+        int c1Len = c1Info.length;
+        if (inputBytes.length < c1Len + C3_LEN) {
+            throw new IllegalArgumentException("输入数据过短，无法解析 C1 与 C3");
         }
-
-        ECPoint c1Point = EC_CURVE.decodePoint(copyOf(inputBytes, C1_LEN)).normalize();
 
         long kMax = Math.min(req.getKMax(), 10_000_000L);
         if (kMax <= 0) {
@@ -88,8 +91,8 @@ public class Sm2kService {
         }
 
         boolean c1c2c3 = "C1C2C3".equalsIgnoreCase(req.getMode());
-        byte[] c1 = copyOf(inputBytes, C1_LEN);
-        byte[] remain = subArray(inputBytes, C1_LEN, inputBytes.length);
+        byte[] c1 = copyOf(inputBytes, c1Len);
+        byte[] remain = subArray(inputBytes, c1Len, inputBytes.length);
 
         if (remain.length < C3_LEN) {
             throw new IllegalArgumentException("密文缺少 C2/C3 部分");
@@ -144,32 +147,79 @@ public class Sm2kService {
         return result;
     }
 
-    /** 在 [1, kMax] 范围内搜索满足 [k]G == c1Point 的 k */
+    /** 在 [1, kMax] 范围内搜索满足 [k]G == c1Point 的 k，使用 BSGS 将复杂度降为 O(√kMax)。 */
     private BigInteger findK(ECPoint c1Point, long kMax) {
-        // 预计算：逐步累加 G，避免每次大整数乘法
-        ECPoint current = G; // [1]G
-        for (long i = 1; i <= kMax; i++) {
-            if (current.equals(c1Point)) {
-                return BigInteger.valueOf(i);
+        if (kMax <= 0) {
+            return null;
+        }
+        long m = (long) Math.ceil(Math.sqrt(kMax));
+        if (m < 1) {
+            m = 1;
+        }
+
+        // Baby steps: jG -> j,  j = 0..m-1
+        java.util.Map<ECPoint, Long> table = new java.util.HashMap<>();
+        ECPoint baby = G.getCurve().getInfinity();
+        for (long j = 0; j < m; j++) {
+            table.put(baby.normalize(), j);
+            baby = baby.add(G).normalize();
+        }
+
+        // Giant steps: C1 - i*(mG), i = 0..m-1
+        ECPoint mG = G.multiply(BigInteger.valueOf(m)).normalize();
+        ECPoint giant = c1Point;
+        for (long i = 0; i < m; i++) {
+            Long j = table.get(giant.normalize());
+            if (j != null) {
+                long k = i * m + j;
+                if (k >= 1 && k <= kMax) {
+                    return BigInteger.valueOf(k);
+                }
             }
-            current = current.add(G).normalize();
+            giant = giant.subtract(mG).normalize();
         }
         return null;
     }
 
-    /** 从输入字节数组中提取 C1 点 */
-    private ECPoint extractC1(byte[] input) {
-        if (input.length < C1_LEN) {
-            // 可能是裸坐标 64 字节，补 04
-            if (input.length == C1_LEN - 1) {
-                byte[] withPrefix = new byte[C1_LEN];
-                withPrefix[0] = 0x04;
-                System.arraycopy(input, 0, withPrefix, 1, input.length);
-                return EC_CURVE.decodePoint(withPrefix).normalize();
-            }
-            throw new IllegalArgumentException("输入数据过短，无法解析 C1 点");
+    /** 从输入字节数组中提取 C1 点，支持未压缩（04）、压缩（02/03）以及裸 64 字节坐标。 */
+    private C1Info decodeC1(byte[] input) {
+        if (input == null || input.length == 0) {
+            throw new IllegalArgumentException("输入数据为空，无法解析 C1 点");
         }
-        return EC_CURVE.decodePoint(copyOf(input, C1_LEN)).normalize();
+        int first = input[0] & 0xff;
+        if (first == 0x04) {
+            if (input.length < C1_LEN) {
+                throw new IllegalArgumentException("未压缩点 C1 长度不足 65 字节");
+            }
+            ECPoint p = EC_CURVE.decodePoint(copyOf(input, C1_LEN)).normalize();
+            return new C1Info(p, C1_LEN);
+        }
+        if (first == 0x02 || first == 0x03) {
+            if (input.length < C1_COMPRESSED_LEN) {
+                throw new IllegalArgumentException("压缩点 C1 长度不足 33 字节");
+            }
+            ECPoint p = EC_CURVE.decodePoint(copyOf(input, C1_COMPRESSED_LEN)).normalize();
+            return new C1Info(p, C1_COMPRESSED_LEN);
+        }
+        // 裸坐标 64 字节，补 04 后按未压缩处理
+        if (input.length >= C1_LEN - 1) {
+            byte[] withPrefix = new byte[C1_LEN];
+            withPrefix[0] = 0x04;
+            System.arraycopy(input, 0, withPrefix, 1, C1_LEN - 1);
+            ECPoint p = EC_CURVE.decodePoint(withPrefix).normalize();
+            return new C1Info(p, C1_LEN - 1);
+        }
+        throw new IllegalArgumentException("C1 点格式不支持，应以 0x04/0x02/0x03 开头，或为 64 字节裸坐标");
+    }
+
+    /** C1 点解析结果：曲线点与输入中实际占用的字节长度。 */
+    private static class C1Info {
+        final ECPoint point;
+        final int length;
+        C1Info(ECPoint point, int length) {
+            this.point = point;
+            this.length = length;
+        }
     }
 
     /** 将输入按指定格式解码为字节 */
