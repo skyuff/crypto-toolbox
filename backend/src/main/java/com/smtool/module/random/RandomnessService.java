@@ -81,13 +81,21 @@ public class RandomnessService {
             }
         }
 
-        boolean overallPass = tests.stream()
+        long applicableCount = tests.stream()
                 .filter(t -> Boolean.TRUE.equals(t.get("applicable")))
-                .allMatch(t -> Boolean.TRUE.equals(t.get("pass")));
+                .count();
+        long passCount = tests.stream()
+                .filter(t -> Boolean.TRUE.equals(t.get("applicable")) && Boolean.TRUE.equals(t.get("pass")))
+                .count();
+        double passRate = applicableCount == 0 ? 0.0 : (double) passCount / applicableCount;
+        boolean overallPass = applicableCount > 0 && passRate >= 0.95;
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("bitLength", n);
         result.put("overallPass", overallPass);
+        result.put("passRate", passRate);
+        result.put("applicableCount", applicableCount);
+        result.put("passCount", passCount);
         result.put("tests", tests);
         return result;
     }

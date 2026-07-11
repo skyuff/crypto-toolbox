@@ -66,12 +66,16 @@
 
     <div v-if="result" class="result-section">
       <div class="section-title">检测结果</div>
-      <el-descriptions :column="2" border>
+      <el-descriptions :column="3" border>
         <el-descriptions-item label="比特长度">{{ result.bitLength }}</el-descriptions-item>
         <el-descriptions-item label="总体结论">
           <el-tag :type="result.overallPass ? 'success' : 'danger'">
             {{ result.overallPass ? '通过' : '未通过' }}
           </el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="通过率">
+          {{ formatPassRate(result.passRate) }}
+          （{{ result.passCount }}/{{ result.applicableCount }}，不适用项不计入）
         </el-descriptions-item>
       </el-descriptions>
       <el-table v-if="result.tests" :data="result.tests" border style="margin-top: 12px" max-height="600">
@@ -166,6 +170,11 @@ function formatPValue(v) {
   const n = Number(v)
   if (n < 0.000001) return '<0.000001'
   return n.toFixed(6)
+}
+
+function formatPassRate(rate) {
+  if (rate === undefined || rate === null) return 'N/A'
+  return (rate * 100).toFixed(2) + '%'
 }
 
 function handleSelectAll(val) {
