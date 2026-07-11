@@ -88,7 +88,7 @@ public class RandomnessService {
                 .filter(t -> Boolean.TRUE.equals(t.get("applicable")) && Boolean.TRUE.equals(t.get("pass")))
                 .count();
         double passRate = applicableCount == 0 ? 0.0 : (double) passCount / applicableCount;
-        boolean overallPass = applicableCount > 0 && passRate >= 0.95;
+        boolean overallPass = applicableCount == 0 || passRate >= 0.95;
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("bitLength", n);
@@ -393,13 +393,14 @@ public class RandomnessService {
         if (cycles < 2) {
             return item(null, "零穿越次数不足，随机游程检测不适用（当前 " + cycles + " 次）", false);
         }
+        int J = cycles - 1; // 实际周期数（零穿越次数）
 
         double[] pValues = new double[states.length];
         StringBuilder detail = new StringBuilder();
         for (int sIdx = 0; sIdx < states.length; sIdx++) {
             int x = states[sIdx];
             int[] v = new int[6];
-            for (int c = 0; c < cycles - 1; c++) {
+            for (int c = 0; c < J; c++) {
                 int start = cycleStart[c];
                 int end = cycleStart[c + 1];
                 int count = 0;
@@ -415,9 +416,10 @@ public class RandomnessService {
                 prob[k] = randomExcursionProb(x, k);
             }
             prob[5] = 1.0 - prob[0] - prob[1] - prob[2] - prob[3] - prob[4];
+            if (prob[5] < 0) prob[5] = 0; // 防止浮点误差导致负概率
             double chiSq = 0.0;
             for (int k = 0; k < 6; k++) {
-                chiSq += Math.pow(v[k] - cycles * prob[k], 2) / (cycles * prob[k]);
+                chiSq += Math.pow(v[k] - J * prob[k], 2) / (J * prob[k]);
             }
             pValues[sIdx] = igamc(5.0 / 2.0, chiSq / 2.0);
             detail.append("x=").append(x).append(":p=").append(fmt(pValues[sIdx])).append(";");
@@ -445,8 +447,9 @@ public class RandomnessService {
         if (cycles < 2) {
             return item(null, "零穿越次数不足，随机游程变量检测不适用（当前 " + cycles + " 次）", false);
         }
+        int J = cycles - 1; // 实际周期数（零穿越次数）
 
-        double[] pValues = new double[states.length];
+        List<Double> validPValues = new ArrayList<>();
         StringBuilder detail = new StringBuilder();
         for (int sIdx = 0; sIdx < states.length; sIdx++) {
             int x = states[sIdx];
@@ -455,15 +458,19 @@ public class RandomnessService {
                 if (v == x) count++;
             }
             if (count < 5) {
-                pValues[sIdx] = 0.0;
-            } else {
-                double numerator = Math.abs(count - cycles);
-                double denominator = Math.sqrt(2.0 * cycles * (4.0 * Math.abs(x) - 2.0));
-                pValues[sIdx] = erfc(numerator / denominator);
+                detail.append("x=").append(x).append(":cnt=").append(count).append(",N/A;");
+                continue;
             }
-            detail.append("x=").append(x).append(":cnt=").append(count).append(",p=").append(fmt(pValues[sIdx])).append(";");
+            double numerator = Math.abs(count - J);
+            double denominator = Math.sqrt(2.0 * J * (4.0 * Math.abs(x) - 2.0));
+            double pValue = erfc(numerator / denominator);
+            validPValues.add(pValue);
+            detail.append("x=").append(x).append(":cnt=").append(count).append(",p=").append(fmt(pValue)).append(";");
         }
-        double minP = Arrays.stream(pValues).min().orElse(0.0);
+        if (validPValues.isEmpty()) {
+            return item(null, "所有状态访问次数均不足 5 次，随机游程变量检测不适用", false);
+        }
+        double minP = validPValues.stream().mapToDouble(Double::doubleValue).min().orElse(0.0);
         return item(minP, detail.toString());
     }
 

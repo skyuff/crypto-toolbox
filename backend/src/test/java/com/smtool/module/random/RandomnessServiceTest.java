@@ -2,6 +2,7 @@ package com.smtool.module.random;
 
 import org.junit.jupiter.api.Test;
 
+import java.security.SecureRandom;
 import java.util.List;
 import java.util.Map;
 
@@ -57,6 +58,31 @@ class RandomnessServiceTest {
         assertNull(test.get("pass"));
         assertNull(test.get("pValue"));
         assertEquals(true, result.get("overallPass")); // 无适用项时视为通过
+    }
+
+    @Test
+    void testRandomExcursionsOnPseudoRandomData() {
+        // 使用固定种子生成可重复的伪随机序列（100000 比特）
+        byte[] data = new byte[12500];
+        SecureRandom sr = new SecureRandom();
+        sr.setSeed(12345L);
+        sr.nextBytes(data);
+
+        RandomnessRequest req = new RandomnessRequest();
+        req.setInput(bytesToHex(data));
+        req.setFormat("hex");
+        req.setSelectedMethods(List.of(9, 10)); // 随机游程检测、随机游程变量检测
+
+        Map<String, Object> result = service.test(req);
+        List<Map<String, Object>> tests = (List<Map<String, Object>>) result.get("tests");
+        assertEquals(2, tests.size());
+
+        for (Map<String, Object> test : tests) {
+            assertTrue(Boolean.TRUE.equals(test.get("applicable")),
+                    "100000 比特伪随机数据应满足随机游程检测前置条件: " + test.get("name"));
+            assertTrue(Boolean.TRUE.equals(test.get("pass")),
+                    "随机游程相关检测应通过: " + test.get("name") + ", pValue=" + test.get("pValue"));
+        }
     }
 
     private String bytesToHex(byte[] data) {
