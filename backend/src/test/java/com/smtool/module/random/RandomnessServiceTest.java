@@ -61,9 +61,9 @@ class RandomnessServiceTest {
     }
 
     @Test
-    void testRandomExcursionsOnPseudoRandomData() {
-        // 使用固定种子生成可重复的伪随机序列（100000 比特）
-        byte[] data = new byte[12500];
+    void testRandomExcursionsApplicableWithSufficientData() {
+        // 使用固定种子生成可重复的伪随机序列（8000000 比特，确保 J >= 500）
+        byte[] data = new byte[1000000];
         SecureRandom sr = new SecureRandom();
         sr.setSeed(12345L);
         sr.nextBytes(data);
@@ -79,9 +79,27 @@ class RandomnessServiceTest {
 
         for (Map<String, Object> test : tests) {
             assertTrue(Boolean.TRUE.equals(test.get("applicable")),
-                    "100000 比特伪随机数据应满足随机游程检测前置条件: " + test.get("name"));
-            assertTrue(Boolean.TRUE.equals(test.get("pass")),
-                    "随机游程相关检测应通过: " + test.get("name") + ", pValue=" + test.get("pValue"));
+                    "足够长度的伪随机数据应满足随机游程检测前置条件: " + test.get("name"));
+        }
+    }
+
+    @Test
+    void testRandomExcursionsNotApplicableWithShortData() {
+        // 32 字节（256 比特）远不足以达到 J >= 500，应判定为不适用
+        RandomnessRequest req = new RandomnessRequest();
+        req.setInput("7fcc5bda80c00189494e74669563019c8e08ca4d69953756f3ab0d892a735e28");
+        req.setFormat("hex");
+        req.setSelectedMethods(List.of(9, 10));
+
+        Map<String, Object> result = service.test(req);
+        List<Map<String, Object>> tests = (List<Map<String, Object>>) result.get("tests");
+        assertEquals(2, tests.size());
+
+        for (Map<String, Object> test : tests) {
+            assertFalse(Boolean.TRUE.equals(test.get("applicable")),
+                    "短数据应不满足随机游程检测前置条件: " + test.get("name"));
+            assertNull(test.get("pass"));
+            assertNull(test.get("pValue"));
         }
     }
 

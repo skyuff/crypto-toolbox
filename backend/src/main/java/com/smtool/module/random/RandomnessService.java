@@ -381,7 +381,6 @@ public class RandomnessService {
             sum += (b == 1) ? 1 : -1;
             xList.add(sum);
         }
-        xList.add(0);
 
         int[] cycleStart = new int[xList.size()];
         int cycles = 0;
@@ -390,10 +389,10 @@ public class RandomnessService {
                 cycleStart[cycles++] = i;
             }
         }
-        if (cycles < 2) {
-            return item(null, "零穿越次数不足，随机游程检测不适用（当前 " + cycles + " 次）", false);
-        }
         int J = cycles - 1; // 实际周期数（零穿越次数）
+        if (J < 500) {
+            return item(null, "零穿越次数不足，随机游程检测不适用（当前 " + J + " 个周期，需至少 500 个）", false);
+        }
 
         double[] pValues = new double[states.length];
         StringBuilder detail = new StringBuilder();
@@ -438,16 +437,15 @@ public class RandomnessService {
             sum += (b == 1) ? 1 : -1;
             xList.add(sum);
         }
-        xList.add(0);
 
         int cycles = 0;
         for (int v : xList) {
             if (v == 0) cycles++;
         }
-        if (cycles < 2) {
-            return item(null, "零穿越次数不足，随机游程变量检测不适用（当前 " + cycles + " 次）", false);
-        }
         int J = cycles - 1; // 实际周期数（零穿越次数）
+        if (J < 500) {
+            return item(null, "零穿越次数不足，随机游程变量检测不适用（当前 " + J + " 个周期，需至少 500 个）", false);
+        }
 
         List<Double> validPValues = new ArrayList<>();
         StringBuilder detail = new StringBuilder();
