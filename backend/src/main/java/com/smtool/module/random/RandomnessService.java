@@ -81,7 +81,9 @@ public class RandomnessService {
             }
         }
 
-        boolean overallPass = tests.stream().allMatch(t -> Boolean.TRUE.equals(t.get("pass")));
+        boolean overallPass = tests.stream()
+                .filter(t -> Boolean.TRUE.equals(t.get("applicable")))
+                .allMatch(t -> Boolean.TRUE.equals(t.get("pass")));
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("bitLength", n);
@@ -188,7 +190,7 @@ public class RandomnessService {
         double tau = 2.0 / Math.sqrt(n);
         if (Math.abs(pi - 0.5) >= tau) {
             String detail = "序列 1 的比例 π=" + fmt(pi) + " 不满足前置条件(|π-0.5|<" + fmt(tau) + ")，游程检测不适用";
-            return item(0.0, detail);
+            return item(null, detail, false);
         }
         int vn = 1;
         for (int i = 1; i < n; i++) {
@@ -210,7 +212,7 @@ public class RandomnessService {
         int[] vClasses;
         if (n < 128) {
             String detail = "数据长度不足 128 比特，最长游程检测不适用（当前 " + n + " 比特）";
-            return item(0.0, detail);
+            return item(null, detail, false);
         } else if (n < 6272) {
             m = 8;
             k = 3;
@@ -268,7 +270,7 @@ public class RandomnessService {
         int Q = 32;
         if (n < M * Q * 38) {
             String detail = "数据长度不足 " + (M * Q * 38) + " 比特，二元矩阵秩检测不适用（当前 " + n + " 比特）";
-            return item(0.0, detail);
+            return item(null, detail, false);
         }
         int N = n / (M * Q);
         int fM = 0, fMm1 = 0, fRest = 0;
@@ -310,7 +312,7 @@ public class RandomnessService {
         int blockSize = 1032;
         if (n < blockSize * 2) {
             String detail = "数据长度不足 " + (blockSize * 2) + " 比特，重叠模板匹配检测不适用（当前 " + n + " 比特）";
-            return item(0.0, detail);
+            return item(null, detail, false);
         }
         int K = 5;
         double[] lambda = new double[]{0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
@@ -381,7 +383,7 @@ public class RandomnessService {
             }
         }
         if (cycles < 2) {
-            return item(0.0, "零穿越次数不足，随机游程检测不适用（当前 " + cycles + " 次）");
+            return item(null, "零穿越次数不足，随机游程检测不适用（当前 " + cycles + " 次）", false);
         }
 
         double[] pValues = new double[states.length];
@@ -433,7 +435,7 @@ public class RandomnessService {
             if (v == 0) cycles++;
         }
         if (cycles < 2) {
-            return item(0.0, "零穿越次数不足，随机游程变量检测不适用（当前 " + cycles + " 次）");
+            return item(null, "零穿越次数不足，随机游程变量检测不适用（当前 " + cycles + " 次）", false);
         }
 
         double[] pValues = new double[states.length];
@@ -461,7 +463,7 @@ public class RandomnessService {
     private Map<String, Object> poker(int[] bits, int n, int m) {
         if (n < m * 20 || n % m != 0) {
             String detail = "数据长度不足或不满足 m=" + m + " 整除，扑克检测不适用（当前 " + n + " 比特）";
-            return item(0.0, detail);
+            return item(null, detail, false);
         }
         int k = n / m;
         Map<String, Integer> freq = new HashMap<>();
@@ -486,7 +488,7 @@ public class RandomnessService {
     private Map<String, Object> serial(int[] bits, int n, int m) {
         if (n < m + 1 || n < Math.pow(2, m) * 5) {
             String detail = "数据长度不足，序列检测 m=" + m + " 不适用（当前 " + n + " 比特）";
-            return item(0.0, detail);
+            return item(null, detail, false);
         }
         double psi2M = psi2(bits, n, m);
         double psi2Mm1 = psi2(bits, n, m - 1);
@@ -529,7 +531,7 @@ public class RandomnessService {
     private Map<String, Object> approximateEntropy(int[] bits, int n, int m) {
         if (n < Math.pow(2, m) * 10) {
             String detail = "数据长度不足，近似熵检测 m=" + m + " 不适用（当前 " + n + " 比特）";
-            return item(0.0, detail);
+            return item(null, detail, false);
         }
         double apEn = computeApEn(bits, n, m);
         double chiSq = 2.0 * n * (Math.log(2) - apEn);
@@ -573,7 +575,7 @@ public class RandomnessService {
         if (blockSize < m * 4) blockSize = m * 4;
         if (n < blockSize * 2) {
             String detail = "数据长度不足，非重叠模板匹配检测不适用（当前 " + n + " 比特）";
-            return item(0.0, detail);
+            return item(null, detail, false);
         }
         int N = n / blockSize;
         double lambda = (blockSize - m + 1) / Math.pow(2.0, m);
@@ -619,7 +621,7 @@ public class RandomnessService {
     private Map<String, Object> linearComplexity(int[] bits, int n, int m) {
         if (n < m * 10) {
             String detail = "数据长度不足，线性复杂度检测 m=" + m + " 不适用（当前 " + n + " 比特）";
-            return item(0.0, detail);
+            return item(null, detail, false);
         }
         int N = n / m;
         double mu = m / 2.0 + (9.0 + Math.pow(-1, m + 1)) / 36.0 - 1.0 / Math.pow(2, m) * (m / 3.0 + 2.0 / 9.0);
@@ -652,7 +654,7 @@ public class RandomnessService {
         int K = n / L - Q;
         if (K <= 0 || Q <= 0) {
             String detail = "数据长度不足，Maurer通用统计检测 L=" + L + ",Q=" + Q + " 不适用（当前 " + n + " 比特）";
-            return item(0.0, detail);
+            return item(null, detail, false);
         }
         Map<Integer, Integer> table = new HashMap<>();
         for (int i = 0; i < Q; i++) {
@@ -687,7 +689,7 @@ public class RandomnessService {
     private Map<String, Object> discreteFourierTransform(int[] bits, int n) {
         if (n < 1000) {
             String detail = "数据长度不足 1000 比特，离散傅里叶变换检测不适用（当前 " + n + " 比特）";
-            return item(0.0, detail);
+            return item(null, detail, false);
         }
         // 为保证 FFT 性能，取不超过 n 的最大 2 的幂进行计算
         int n2 = Integer.highestOneBit(n);
@@ -1054,12 +1056,17 @@ public class RandomnessService {
         return bits;
     }
 
-    private Map<String, Object> item(double pValue, String detail) {
+    private Map<String, Object> item(Double pValue, String detail, boolean applicable) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("pValue", pValue);
-        m.put("pass", pValue >= ALPHA);
+        m.put("pass", applicable ? pValue >= ALPHA : null);
+        m.put("applicable", applicable);
         m.put("detail", detail);
         return m;
+    }
+
+    private Map<String, Object> item(double pValue, String detail) {
+        return item(pValue, detail, true);
     }
 
     private String fmt(double v) {

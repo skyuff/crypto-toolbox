@@ -79,12 +79,13 @@
         <el-table-column prop="name" label="检测项" min-width="260" />
         <el-table-column prop="pValue" label="P-value" width="140">
           <template #default="{ row }">
-            <span :class="row.pass ? 'pass-text' : 'fail-text'">{{ formatPValue(row.pValue) }}</span>
+            <span :class="row.applicable ? (row.pass ? 'pass-text' : 'fail-text') : 'na-text'">{{ formatPValue(row.pValue) }}</span>
           </template>
         </el-table-column>
         <el-table-column label="结论" width="90" align="center">
           <template #default="{ row }">
-            <el-tag size="small" :type="row.pass ? 'success' : 'danger'">
+            <el-tag v-if="!row.applicable" size="small" type="info">不适用</el-tag>
+            <el-tag v-else size="small" :type="row.pass ? 'success' : 'danger'">
               {{ row.pass ? 'PASS' : 'FAIL' }}
             </el-tag>
           </template>
@@ -160,7 +161,7 @@ function formatBitLength(len) {
 }
 
 function formatPValue(v) {
-  if (v === undefined || v === null) return '-'
+  if (v === undefined || v === null) return 'N/A'
   if (v === 0) return '0.000000'
   const n = Number(v)
   if (n < 0.000001) return '<0.000001'
@@ -336,5 +337,8 @@ function clear() {
 }
 .fail-text {
   color: #f56c6c;
+}
+.na-text {
+  color: #909399;
 }
 </style>
