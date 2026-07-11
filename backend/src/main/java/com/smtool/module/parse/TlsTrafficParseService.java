@@ -70,7 +70,12 @@ public class TlsTrafficParseService {
 
         List<TlsSessionDto> dtos = new ArrayList<>();
         for (TlsSession session : sessions) {
-            dtos.add(sessionMapper.toDto(session));
+            TlsSessionDto dto = sessionMapper.toDto(session);
+            if (!dto.isHandshakeCompleted()) {
+                log.info(" Filter out incomplete TLS handshake session: {}", dto.getId());
+                continue;
+            }
+            dtos.add(dto);
         }
 
         long parseTime = System.currentTimeMillis() - start;
