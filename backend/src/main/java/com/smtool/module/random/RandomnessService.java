@@ -22,7 +22,7 @@ public class RandomnessService {
             new MethodMeta(1, "单比特频数检测", "检测序列中0和1的出现次数是否近似相等。"),
             new MethodMeta(2, "块内频数检测", "检测序列中任意长度子块内1的比例是否接近1/2。"),
             new MethodMeta(3, "游程检测", "检测序列中0游程和1游程总数是否满足随机性要求。"),
-            new MethodMeta(4, "块内最长游程检测", "检测子块内最长1游程的分布是否符合随机序列期望。"),
+            new MethodMeta(4, "块内最长1游程检测", "检测子块内最长1游程的分布是否符合随机序列期望。"),
             new MethodMeta(5, "二元矩阵秩检测", "检测序列中子矩阵的秩分布，评估线性相关性。"),
             new MethodMeta(6, "重叠模板匹配检测", "检测特定模板在序列中重叠出现的次数。"),
             new MethodMeta(7, "累积和检测（前向）", "检测序列前向累积和偏离零的程度。"),
@@ -30,23 +30,23 @@ public class RandomnessService {
             new MethodMeta(9, "随机游程检测", "检测序列中部分和的随机游程特征。"),
             new MethodMeta(10, "随机游程变量检测", "检测序列中部分和在各状态停留的次数。"),
             new MethodMeta(11, "扑克检测 m=4", "将序列分成长度为4的子段，检测各类模式出现频率。"),
-            new MethodMeta(12, "扑克检测 m=8", "将序列分成长度为8的子段，检测各类模式出现频率。"),
-            new MethodMeta(13, "序列检测 m=2", "检测序列中长度为2的重叠模式出现频率。"),
-            new MethodMeta(14, "序列检测 m=3", "检测序列中长度为3的重叠模式出现频率。"),
-            new MethodMeta(15, "序列检测 m=4", "检测序列中长度为4的重叠模式出现频率。"),
-            new MethodMeta(16, "序列检测 m=5", "检测序列中长度为5的重叠模式出现频率。"),
-            new MethodMeta(17, "近似熵检测 m=2", "检测长度为2的重叠模式与自身连接模式的近似熵。"),
-            new MethodMeta(18, "近似熵检测 m=3", "检测长度为3的重叠模式与自身连接模式的近似熵。"),
-            new MethodMeta(19, "近似熵检测 m=4", "检测长度为4的重叠模式与自身连接模式的近似熵。"),
-            new MethodMeta(20, "非重叠模板匹配检测 B=000000001", "检测非重叠模板000000001在子块中的出现次数。"),
-            new MethodMeta(21, "非重叠模板匹配检测 B=000000011", "检测非重叠模板000000011在子块中的出现次数。"),
-            new MethodMeta(22, "近似熵检测 m=5", "检测长度为5的重叠模式与自身连接模式的近似熵。"),
-            new MethodMeta(23, "非重叠模板匹配检测 B=000000101", "检测非重叠模板000000101在子块中的出现次数。"),
-            new MethodMeta(24, "线性复杂度检测 m=500", "检测子块线性复杂度的分布，m=500。"),
-            new MethodMeta(25, "线性复杂度检测 m=1000", "检测子块线性复杂度的分布，m=1000。"),
-            new MethodMeta(26, "非重叠模板匹配检测 B=000001001", "检测非重叠模板000001001在子块中的出现次数。"),
-            new MethodMeta(27, "Maurer通用统计检测 L=7,Q=1280", "检测序列的可压缩性，L=7，Q=1280。"),
-            new MethodMeta(28, "离散傅里叶变换检测", "检测序列频谱中峰值的分布，识别周期性模式。")
+            new MethodMeta(12, "序列检测 m=2", "检测序列中长度为2的重叠模式出现频率。"),
+            new MethodMeta(13, "序列检测 m=3", "检测序列中长度为3的重叠模式出现频率。"),
+            new MethodMeta(14, "近似熵检测 m=2", "检测长度为2的重叠模式与自身连接模式的近似熵。"),
+            new MethodMeta(15, "近似熵检测 m=3", "检测长度为3的重叠模式与自身连接模式的近似熵。"),
+            new MethodMeta(16, "非重叠模板匹配检测 B=000000001", "检测非重叠模板000000001在子块中的出现次数。"),
+            new MethodMeta(17, "非重叠模板匹配检测 B=000000011", "检测非重叠模板000000011在子块中的出现次数。"),
+            new MethodMeta(18, "非重叠模板匹配检测 B=000000101", "检测非重叠模板000000101在子块中的出现次数。"),
+            new MethodMeta(19, "线性复杂度检测 m=1000", "检测子块线性复杂度的分布，m=1000。"),
+            new MethodMeta(20, "Maurer通用统计检测 L=7,Q=1280", "检测序列的可压缩性，L=7，Q=1280。"),
+            new MethodMeta(21, "离散傅里叶变换检测", "检测序列频谱中峰值的分布，识别周期性模式。"),
+            new MethodMeta(22, "游程分布检测", "检测序列中各种长度游程的出现次数分布是否符合随机性要求。"),
+            new MethodMeta(23, "二元推导检测 k=3", "对序列进行3次推导后检测0/1分布是否均衡。"),
+            new MethodMeta(24, "二元推导检测 k=7", "对序列进行7次推导后检测0/1分布是否均衡。"),
+            new MethodMeta(25, "自相关检测 d=1", "检测序列与滞后1位序列的相关性。"),
+            new MethodMeta(26, "自相关检测 d=8", "检测序列与滞后8位序列的相关性。"),
+            new MethodMeta(27, "自相关检测 d=16", "检测序列与滞后16位序列的相关性。"),
+            new MethodMeta(28, "块内最长0游程检测", "检测子块内最长0游程的分布是否符合随机序列期望。")
     );
 
     /** 执行检测。 */
@@ -126,23 +126,23 @@ public class RandomnessService {
             case 9 -> randomExcursions(bits, n);
             case 10 -> randomExcursionsVariant(bits, n);
             case 11 -> poker(bits, n, 4);
-            case 12 -> poker(bits, n, 8);
-            case 13 -> serial(bits, n, 2);
-            case 14 -> serial(bits, n, 3);
-            case 15 -> serial(bits, n, 4);
-            case 16 -> serial(bits, n, 5);
-            case 17 -> approximateEntropy(bits, n, 2);
-            case 18 -> approximateEntropy(bits, n, 3);
-            case 19 -> approximateEntropy(bits, n, 4);
-            case 20 -> nonOverlappingTemplateMatching(bits, n, "000000001");
-            case 21 -> nonOverlappingTemplateMatching(bits, n, "000000011");
-            case 22 -> approximateEntropy(bits, n, 5);
-            case 23 -> nonOverlappingTemplateMatching(bits, n, "000000101");
-            case 24 -> linearComplexity(bits, n, 500);
-            case 25 -> linearComplexity(bits, n, 1000);
-            case 26 -> nonOverlappingTemplateMatching(bits, n, "000001001");
-            case 27 -> maurerUniversal(bits, n, 7, 1280);
-            case 28 -> discreteFourierTransform(bits, n);
+            case 12 -> serial(bits, n, 2);
+            case 13 -> serial(bits, n, 3);
+            case 14 -> approximateEntropy(bits, n, 2);
+            case 15 -> approximateEntropy(bits, n, 3);
+            case 16 -> nonOverlappingTemplateMatching(bits, n, "000000001");
+            case 17 -> nonOverlappingTemplateMatching(bits, n, "000000011");
+            case 18 -> nonOverlappingTemplateMatching(bits, n, "000000101");
+            case 19 -> linearComplexity(bits, n, 1000);
+            case 20 -> maurerUniversal(bits, n, 7, 1280);
+            case 21 -> discreteFourierTransform(bits, n);
+            case 22 -> runsDistribution(bits, n);
+            case 23 -> binaryDerivative(bits, n, 3);
+            case 24 -> binaryDerivative(bits, n, 7);
+            case 25 -> autocorrelation(bits, n, 1);
+            case 26 -> autocorrelation(bits, n, 8);
+            case 27 -> autocorrelation(bits, n, 16);
+            case 28 -> longestRunOfZeros(bits, n);
             default -> null;
         };
     }
@@ -163,9 +163,9 @@ public class RandomnessService {
 
     /** 2) 块内频数检测（Frequency within Block）。 */
     private Map<String, Object> frequencyWithinBlock(int[] bits, int n) {
-        int m = 100;
+        int m = 10000; // GM/T 0005 推荐值（1,000,000 比特样本）
         if (n < m) {
-            m = Math.max(1, n / 8);
+            m = Math.max(1, n / 100);
             if (m < 1) m = n;
         }
         int numBlocks = n / m;
@@ -727,6 +727,163 @@ public class RandomnessService {
         double d = (double) (n1 - 0.95 * n0) / Math.sqrt(n0 * 0.95 * 0.05 / 4.0);
         double pValue = erfc(Math.abs(d) / Math.sqrt(2.0));
         String detail = "有效长度=" + n2 + "，阈值=" + fmt(threshold) + "，低于阈值峰数N1=" + n1 + "，期望=" + fmt(0.95 * n0);
+        return item(pValue, detail);
+    }
+
+    /** 22) 游程分布检测（Runs Distribution）。 */
+    private Map<String, Object> runsDistribution(int[] bits, int n) {
+        if (n < 100) {
+            String detail = "数据长度不足 100 比特，游程分布检测不适用（当前 " + n + " 比特）";
+            return item(null, detail, false);
+        }
+        // 统计所有游程长度
+        List<Integer> runLengths = new ArrayList<>();
+        int curLen = 1;
+        for (int i = 1; i < n; i++) {
+            if (bits[i] == bits[i - 1]) {
+                curLen++;
+            } else {
+                runLengths.add(curLen);
+                curLen = 1;
+            }
+        }
+        runLengths.add(curLen);
+
+        // 确定最大分类 kMax：使长度 i 的游程期望 >= 5 的最大 i
+        // 随机序列长度为 i 的游程期望 e_i = (n + 1) / 2^(i+1)
+        int kMax = 1;
+        while ((n + 1) / Math.pow(2, kMax + 1) >= 5.0 && kMax < 30) {
+            kMax++;
+        }
+        kMax--;
+        if (kMax < 1) {
+            String detail = "数据长度过短，无法进行游程分布分类（当前 " + n + " 比特）";
+            return item(null, detail, false);
+        }
+
+        int[] counts = new int[kMax + 1];
+        for (int len : runLengths) {
+            int idx = Math.min(len - 1, kMax);
+            counts[idx]++;
+        }
+
+        double chiSq = 0.0;
+        double totalExpect = 0.0;
+        for (int i = 0; i < kMax; i++) {
+            int len = i + 1;
+            double expect = (n + 1) / Math.pow(2, len + 1);
+            chiSq += Math.pow(counts[i] - expect, 2) / expect;
+            totalExpect += expect;
+        }
+        // 尾部（长度 > kMax）期望 = 总游程期望 - 前面各项期望之和
+        double tailExpect = (n + 1) / 2.0 - totalExpect;
+        if (tailExpect <= 0) tailExpect = 1e-10;
+        chiSq += Math.pow(counts[kMax] - tailExpect, 2) / tailExpect;
+        double pValue = igamc(kMax / 2.0, chiSq / 2.0);
+        String detail = "分类数=" + (kMax + 1) + "，分布=" + Arrays.toString(counts) + "，卡方χ²=" + fmt(chiSq);
+        return item(pValue, detail);
+    }
+
+    /** 23/24) 二元推导检测（Binary Derivative）。 */
+    private Map<String, Object> binaryDerivative(int[] bits, int n, int k) {
+        if (n <= k) {
+            String detail = "数据长度不足，二元推导检测 k=" + k + " 不适用（当前 " + n + " 比特）";
+            return item(null, detail, false);
+        }
+        int[] derived = Arrays.copyOf(bits, n);
+        int len = n;
+        for (int step = 0; step < k; step++) {
+            int newLen = len - 1;
+            int[] next = new int[newLen];
+            for (int i = 0; i < newLen; i++) {
+                next[i] = derived[i] ^ derived[i + 1];
+            }
+            derived = next;
+            len = newLen;
+        }
+        long s = 0;
+        for (int b : derived) {
+            s += (b == 1) ? 1 : -1;
+        }
+        double sObs = Math.abs(s) / Math.sqrt(len);
+        double pValue = erfc(sObs / Math.sqrt(2.0));
+        String detail = "推导次数k=" + k + "，推导后长度=" + len + "，0/1差|S|=" + Math.abs(s);
+        return item(pValue, detail);
+    }
+
+    /** 25-27) 自相关检测（Autocorrelation）。 */
+    private Map<String, Object> autocorrelation(int[] bits, int n, int d) {
+        if (n <= d) {
+            String detail = "数据长度不足，自相关检测 d=" + d + " 不适用（当前 " + n + " 比特）";
+            return item(null, detail, false);
+        }
+        int a = 0;
+        for (int i = 0; i < n - d; i++) {
+            a += bits[i] ^ bits[i + d];
+        }
+        double expected = (n - d) / 2.0;
+        double v = 2.0 * (a - expected) / Math.sqrt(n - d);
+        double pValue = erfc(Math.abs(v) / Math.sqrt(2.0));
+        String detail = "移位d=" + d + "，不同位数A=" + a + "，统计量V=" + fmt(v);
+        return item(pValue, detail);
+    }
+
+    /** 28) 块内最长0游程检测（Longest Run of Zeros in a Block）。 */
+    private Map<String, Object> longestRunOfZeros(int[] bits, int n) {
+        int m, k, numBlocks;
+        double[] pi;
+        int[] vClasses;
+        if (n < 128) {
+            String detail = "数据长度不足 128 比特，最长0游程检测不适用（当前 " + n + " 比特）";
+            return item(null, detail, false);
+        } else if (n < 6272) {
+            m = 8;
+            k = 3;
+            numBlocks = n / m;
+            pi = new double[]{0.2148, 0.3672, 0.2305, 0.1875};
+            vClasses = new int[]{1, 2, 3, 4};
+        } else if (n < 750000) {
+            m = 128;
+            k = 5;
+            numBlocks = n / m;
+            pi = new double[]{0.1174, 0.2430, 0.2493, 0.1752, 0.1027, 0.1124};
+            vClasses = new int[]{4, 5, 6, 7, 8, 9};
+        } else {
+            m = 10000;
+            k = 6;
+            numBlocks = n / m;
+            pi = new double[]{0.0882, 0.2092, 0.2483, 0.1933, 0.1208, 0.0675, 0.0727};
+            vClasses = new int[]{10, 11, 12, 13, 14, 15, 16};
+        }
+
+        int[] v = new int[k + 1];
+        for (int i = 0; i < numBlocks; i++) {
+            int longest = 0;
+            int cur = 0;
+            for (int j = 0; j < m; j++) {
+                if (bits[i * m + j] == 0) {
+                    cur++;
+                    longest = Math.max(longest, cur);
+                } else {
+                    cur = 0;
+                }
+            }
+            int classIdx = classifyLongest(longest, vClasses);
+            v[classIdx]++;
+        }
+
+        double chiSq = 0.0;
+        for (int i = 0; i <= k; i++) {
+            double expect = numBlocks * pi[i];
+            chiSq += (v[i] - expect) * (v[i] - expect) / expect;
+        }
+        double pValue = igamc(k / 2.0, chiSq / 2.0);
+        StringBuilder vs = new StringBuilder();
+        for (int i = 0; i <= k; i++) {
+            vs.append(v[i]);
+            if (i < k) vs.append(",");
+        }
+        String detail = "块大小M=" + m + "，块数N=" + numBlocks + "，分布[" + vs + "]，卡方χ²=" + fmt(chiSq);
         return item(pValue, detail);
     }
 
